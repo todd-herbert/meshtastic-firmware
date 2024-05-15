@@ -272,6 +272,10 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false)
         gpio_hold_en((gpio_num_t)BUTTON_PIN);
     }
 #endif
+#ifdef TOUCH_CS
+        pinMode(TOUCH_CS, INPUT_PULLUP);
+        gpio_hold_en((gpio_num_t)TOUCH_CS);
+#endif
     if (GPIO_IS_VALID_OUTPUT_GPIO(LORA_CS)) {
         // LoRa CS (RADIO_NSS) needs to stay HIGH, even during deep sleep
         pinMode(LORA_CS, OUTPUT);

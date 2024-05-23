@@ -35,6 +35,9 @@
 #if !MESHTASTIC_EXCLUDE_WAYPOINT
 #include "modules/WaypointModule.h"
 #endif
+#ifdef ENABLE_REMOTE_RANGETEST
+#include "modules/RemoteRangeTestModule.h"
+#endif
 #if ARCH_PORTDUINO
 #include "input/LinuxInputImpl.h"
 #endif
@@ -105,6 +108,9 @@ void setupModules()
 
 #if !MESHTASTIC_EXCLUDE_REMOTEHARDWARE
         new RemoteHardwareModule();
+#endif
+#ifdef ENABLE_REMOTE_RANGETEST
+        new RemoteRangetestModule();
 #endif
         // Example: Put your module here
         // new ReplyModule();

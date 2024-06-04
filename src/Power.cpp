@@ -19,6 +19,9 @@
 #include "meshUtils.h"
 #include "sleep.h"
 
+// Open Cell Voltage (OCV) data
+#include "BatteryCharacteristics.h"
+
 // Working USB detection for powered/charging states on the RAK platform
 #ifdef NRF_APM
 #include "nrfx_power.h"
@@ -147,12 +150,12 @@ class AnalogBatteryLevel : public HasBatteryLevel
     {
         float v = getBattVoltage();
 
-        if (v < noBatVolt)
+        if (v < noBatVolt())
             return -1; // If voltage is super low assume no battery installed
 
 #ifdef NO_BATTERY_LEVEL_ON_CHARGE
         // This does not work on a RAK4631 with battery connected
-        if (v > chargingVolt)
+        if (v > chargingVolt())
             return 0; // While charging we can't report % full on the battery
 #endif
         /**
@@ -162,15 +165,15 @@ class AnalogBatteryLevel : public HasBatteryLevel
          * @date    06/02/2024
          */
         float battery_SOC = 0.0;
-        uint16_t voltage = v / NUM_CELLS; // single cell voltage (average)
+        uint16_t voltage = v / numCells(); // single cell voltage (average)
         for (int i = 0; i < NUM_OCV_POINTS; i++) {
-            if (OCV[i] <= voltage) {
+            if (OCV(i) <= voltage) {
                 if (i == 0) {
                     battery_SOC = 100.0; // 100% full
                 } else {
-                    // interpolate between OCV[i] and OCV[i-1]
+                    // interpolate between OCV(i) and OCV(i-1)
                     battery_SOC = (float)100.0 / (NUM_OCV_POINTS - 1.0) *
-                                  (NUM_OCV_POINTS - 1.0 - i + ((float)voltage - OCV[i]) / (OCV[i - 1] - OCV[i]));
+                                  (NUM_OCV_POINTS - 1.0 - i + ((float)voltage - OCV(i)) / (OCV(i - 1) - OCV(i)));
                 }
                 break;
             }
@@ -342,7 +345,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
         // if it's not HIGH - check the battery
 #endif
 
-        return getBattVoltage() > chargingVolt;
+        return getBattVoltage() > chargingVolt();
     }
 
     /// Assume charging if we have a battery and external power is connected.
@@ -357,19 +360,9 @@ class AnalogBatteryLevel : public HasBatteryLevel
     }
 
   private:
-    /// If we see a battery voltage higher than physics allows - assume charger is pumping
-    /// in power
-
-    /// For heltecs with no battery connected, the measured voltage is 2204, so
-    // need to be higher than that, in this case is 2500mV (3000-500)
-    const uint16_t OCV[NUM_OCV_POINTS] = {OCV_ARRAY};
-    const float chargingVolt = (OCV[0] + 10) * NUM_CELLS;
-    const float noBatVolt = (OCV[NUM_OCV_POINTS - 1] - 500) * NUM_CELLS;
-    // Start value from minimum voltage for the filter to not start from 0
-    // that could trigger some events.
-    // This value is over-written by the first ADC reading, it the voltage seems reasonable.
+    // ADC readings
     bool initial_read_done = false;
-    float last_read_value = (OCV[NUM_OCV_POINTS - 1] * NUM_CELLS);
+    float last_read_value = 0; // Initial value from first ADC reading; subsequent readings smoothed
     uint32_t last_read_time_ms = 0;
 
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && !defined(ARCH_PORTDUINO)
@@ -544,8 +537,8 @@ void Power::readPowerStatus()
                 // If the AXP192 returns a percentage less than 0, the feature is either not supported or there is an error
                 // In that case, we compute an estimate of the charge percent based on open circuite voltage table defined
                 // in power.h
-                batteryChargePercent = clamp((int)(((batteryVoltageMv - (OCV[NUM_OCV_POINTS - 1] * NUM_CELLS)) * 1e2) /
-                                                   ((OCV[0] * NUM_CELLS) - (OCV[NUM_OCV_POINTS - 1] * NUM_CELLS))),
+                batteryChargePercent = clamp((int)(((batteryVoltageMv - (OCV(NUM_OCV_POINTS - 1) * numCells())) * 1e2) /
+                                                   ((OCV(0) * numCells()) - (OCV(NUM_OCV_POINTS - 1) * numCells()))),
                                              0, 100);
             }
         }
@@ -625,7 +618,7 @@ void Power::readPowerStatus()
         // a row. NOTE: min LiIon/LiPo voltage is 2.0 to 2.5V, current OCV min is set to 3100 that is large enough.
         //
         if (powerStatus2.getHasBattery() && !powerStatus2.getHasUSB()) {
-            if (batteryLevel->getBattVoltage() < OCV[NUM_OCV_POINTS - 1]) {
+            if (batteryLevel->getBattVoltage() < OCV(NUM_OCV_POINTS - 1) * numCells()) {
                 low_voltage_counter++;
                 LOG_DEBUG("Low voltage counter: %d/10\n", low_voltage_counter);
                 if (low_voltage_counter > 10) {
@@ -972,8 +965,7 @@ bool Power::axpChipInit()
     }
 
     pinMode(PMU_IRQ, INPUT);
-    attachInterrupt(
-        PMU_IRQ, [] { pmu_irq = true; }, FALLING);
+    attachInterrupt(PMU_IRQ, [] { pmu_irq = true; }, FALLING);
 
     // we do not look for AXPXXX_CHARGING_FINISHED_IRQ & AXPXXX_CHARGING_IRQ because it occurs repeatedly while there is
     // no battery also it could cause inadvertent waking from light sleep just because the battery filled

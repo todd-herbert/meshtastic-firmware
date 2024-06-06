@@ -1648,6 +1648,9 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
     !defined(M5STACK) // set display brightness when turning on screens. Just moved function from TFTDisplay to here.
             static_cast<TFTDisplay *>(dispdev)->setDisplayBrightness(brightness);
 #endif
+#ifdef TFT_BL
+            digitalWrite(TFT_BL, TFT_BACKLIGHT_ON);
+#endif
 
             dispdev->displayOn();
 
@@ -1663,6 +1666,9 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
             dispdev->displayOff();
 #ifdef T_WATCH_S3
             PMU->disablePowerOutput(XPOWERS_ALDO2);
+#endif
+#ifdef TFT_BL
+            digitalWrite(TFT_BL, !TFT_BACKLIGHT_ON);
 #endif
             enabled = false;
         }

@@ -675,17 +675,17 @@ void Power::readPowerStatus()
 
 #endif
 
-    // If we have a battery at all and it is less than 0%, force deep sleep if we have more than 10 low readings in
-    // a row. NOTE: min LiIon/LiPo voltage is 2.0 to 2.5V, current OCV min is set to 3100 that is large enough.
-    //
-    if (batteryLevel && powerStatus2.getHasBattery() && !powerStatus2.getHasUSB()) {
-        if (batteryLevel->getBattVoltage() < OCV[NUM_OCV_POINTS - 1]) {
-            low_voltage_counter++;
-            LOG_DEBUG("Low voltage counter: %d/10\n", low_voltage_counter);
-            if (low_voltage_counter > 10) {
+        // If we have a battery at all and it is less than 0%, force deep sleep if we have more than 10 low readings in
+        // a row. NOTE: min LiIon/LiPo voltage is 2.0 to 2.5V, current OCV min is set to 3100 that is large enough.
+        //
+        if (batteryLevel && powerStatus2.getHasBattery() && !powerStatus2.getHasUSB()) {
+            if (batteryLevel->getBattVoltage() < NASTYSOLAR_CUTOFF_MV) {
+                low_voltage_counter++;
+                LOG_DEBUG("Low voltage counter: %d/10\n", low_voltage_counter);
+                if (low_voltage_counter > 10) {
 #ifdef ARCH_NRF52
-                // We can't trigger deep sleep on NRF52, it's freezing the board
-                LOG_DEBUG("Low voltage detected, but not triggering deep sleep\n");
+                    LOG_DEBUG("Low voltage detected, rebooting to use the nasty solar hack\n");
+                    rebootAtMsec = millis() + 5000;
 #else
                 LOG_INFO("Low voltage detected, triggering deep sleep\n");
                 powerFSM.trigger(EVENT_LOW_BATTERY);

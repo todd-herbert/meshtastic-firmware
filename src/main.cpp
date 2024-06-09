@@ -239,6 +239,8 @@ void printInfo()
 #ifndef PIO_UNIT_TESTING
 void setup()
 {
+    nastySolarBootCheck();
+
     concurrency::hasBeenSetup = true;
 #if ARCH_PORTDUINO
     SPISettings spiSettings(settingsMap[spiSpeed], MSBFIRST, SPI_MODE0);

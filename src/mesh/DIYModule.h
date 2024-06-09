@@ -30,6 +30,7 @@ class DIYModule
 
   protected:
     void sendPhoneFeedback(const char *text, const char *channelName = ""); // Send info to user, appearing as mesh text message
+    static void spoofACK(meshtastic_MeshPacket &packetToACK);
     static bool stringsMatch(const char *s1, const char *s2, bool caseSensitive = true); // Compare two strings
     static char *getArg(uint8_t index, bool untilEnd = false); // Use inside handleSentText() to parse the command / data sent
 

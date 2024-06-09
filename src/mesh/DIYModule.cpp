@@ -85,6 +85,9 @@ ProcessMessage DIYModule::interceptSentText(meshtastic_MeshPacket &mp, RxSource 
         argMemoryAllocated = false;
     }
 
+    if (intercepted)
+        spoofACK(mp);
+
     return intercepted ? ProcessMessage::STOP : ProcessMessage::CONTINUE;
 }
 
@@ -110,6 +113,29 @@ void DIYModule::sendPhoneFeedback(const char *text, const char *channelName)
     // Send the new packet off to the phone
     LOG_DEBUG("Sent feedback to phone: \"%s\"\n", text);
     service.sendToPhone(feedback);
+}
+
+void DIYModule::spoofACK(meshtastic_MeshPacket &packetToAck)
+{
+    // Create a routing message
+    meshtastic_Routing r = meshtastic_Routing_init_default;
+    r.error_reason = meshtastic_Routing_Error::meshtastic_Routing_Error_NONE;
+    r.which_variant = meshtastic_Routing_error_reason_tag;
+
+    // Load the routing message into a packet, and set the other details
+    meshtastic_MeshPacket *p = router->allocForSending();
+    p->decoded.portnum = meshtastic_PortNum_ROUTING_APP;
+    p->decoded.payload.size =
+        pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), &meshtastic_Routing_msg, &r);
+    p->priority = meshtastic_MeshPacket_Priority_ACK;
+    p->hop_limit = 0;
+    p->to = myNodeInfo.my_node_num;
+    p->decoded.request_id = packetToAck.id;
+    p->channel = packetToAck.channel;
+
+    // Send the ACK packet to phone
+    LOG_DEBUG("Sending ACK for intercepted message\n");
+    service.sendToPhone(p);
 }
 
 // Check if a mesh channel exists

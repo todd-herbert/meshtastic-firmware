@@ -215,6 +215,8 @@ __attribute__((weak, noinline)) bool loopCanSleep()
 
 void setup()
 {
+    nastySolarBootCheck();
+
     concurrency::hasBeenSetup = true;
     meshtastic_Config_DisplayConfig_OledType screen_model =
         meshtastic_Config_DisplayConfig_OledType::meshtastic_Config_DisplayConfig_OledType_OLED_AUTO;

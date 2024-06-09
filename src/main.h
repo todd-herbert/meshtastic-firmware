@@ -61,6 +61,8 @@ extern graphics::Screen *screen;
 extern AccelerometerThread *accelerometerThread;
 #endif
 
+#include "NastySolar.h"
+
 extern bool isVibrating;
 
 extern int TCPPort; // set by Portduino

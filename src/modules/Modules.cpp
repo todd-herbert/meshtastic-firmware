@@ -70,6 +70,15 @@
 #include "modules/SerialModule.h"
 #endif
 #endif
+
+/*
+ * Include your DIY Modules here
+ */
+
+#ifdef DIYMODULES_DEMO
+#include "DemoDIYModule.h"
+#endif
+
 /**
  * Create module instances here.  If you are adding a new module, you must 'new' it here (or somewhere else)
  */
@@ -184,6 +193,12 @@ void setupModules()
         traceRouteModule = new TraceRouteModule();
 #endif
     }
+
+// Create your DIY modules here
+#ifdef DIYMODULES_DEMO
+    demoDIYModule = new DemoDIYModule();
+#endif
+
     // NOTE! This module must be added LAST because it likes to check for replies from other modules and avoid sending extra
     // acks
     routingModule = new RoutingModule();

@@ -6,6 +6,7 @@
 
 #include "../concurrency/Periodic.h"
 #include "BluetoothCommon.h" // needed for updateBatteryLevel, FIXME, eventually when we pull mesh out into a lib we shouldn't be whacking bluetooth from here
+#include "DIYModule.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
@@ -243,6 +244,15 @@ ErrorCode MeshService::sendQueueStatusToPhone(const meshtastic_QueueStatus &qs, 
 
 void MeshService::sendToMesh(meshtastic_MeshPacket *p, RxSource src, bool ccToPhone)
 {
+
+#ifdef DIYMODULES
+    // We're intercepting manually, because it leaves user free to override handleReceived for their own purpose
+    if (DIYModule::interceptSentText(*p, src) == ProcessMessage::STOP) {
+        LOG_DEBUG("DIYModule: message was intended for a local module. Cancelling send to mesh\n");
+        return;
+    }
+#endif
+
     uint32_t mesh_packet_id = p->id;
     nodeDB->updateFrom(*p); // update our local DB for this packet (because phone might have sent position packets etc...)
 

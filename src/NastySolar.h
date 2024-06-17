@@ -2,10 +2,9 @@
 
 #include "RadioLib.h"
 #include "configuration.h"
-#include "target_specific.h"
 
 #ifndef RAK_4631
-#error This only handles RAK_4631 right now
+#error This is only for RAK4631 right now
 #endif
 
 #ifndef NASTYSOLAR_CUTOFF_MV

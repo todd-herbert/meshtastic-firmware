@@ -1,10 +1,13 @@
 #include "NastySolar.h"
+#include "bluefruit.h"
+#include "target_specific.h"
 
 // Quick and dirty hack to intercept boot and check voltage
 // If too low, refuse to boot; sleep and check again later
 
 void nastySolarBootCheck()
 {
+
     // Set-up to read battery via ADC
     pinMode(BATTERY_PIN, INPUT);
     analogReference(VBAT_AR_INTERNAL);
@@ -24,6 +27,14 @@ void nastySolarBootCheck()
         pinMode(PIN_LED2, OUTPUT);
         digitalWrite(PIN_LED2, HIGH);
 
+        Bluefruit.autoConnLed(false);
+        Bluefruit.configPrphBandwidth(BANDWIDTH_MAX);
+        Bluefruit.begin();
+
+        // Shutdown bluetooth for minimum power draw
+        Bluefruit.Advertising.stop();
+        Bluefruit.setTxPower(-40); // Minimum power
+
         // Init the radio, to place into a low power state
         SX1262 radio = new Module(SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY);
         radio.begin();
@@ -40,8 +51,10 @@ void nastySolarBootCheck()
         digitalWrite(PIN_LED2, LOW);
         digitalWrite(PIN_3V3_EN, LOW);
 
-        // Enter "low power mode" (not using soft device)
-        NRF_POWER->TASKS_LOWPWR = 1;
+        // // Enter "low power mode" (not using soft device)
+        // NRF_POWER->TASKS_LOWPWR = 1;
+
+        sd_power_mode_set(NRF_POWER_MODE_LOWPWR);
 
         // Wait, then reboot
         delay(NASTYSOLAR_CHECK_MINUTES * 60 * 1000UL);

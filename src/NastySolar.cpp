@@ -21,17 +21,14 @@ void nastySolarBootCheck()
     raw = raw / samples;
     uint32_t mv = ADC_MULTIPLIER * ((1000 * AREF_VOLTAGE) / pow(2, BATTERY_SENSE_RESOLUTION_BITS)) * raw;
 
-    // If below the cutoff voltage
-    if (mv < NASTYSOLAR_CUTOFF_MV) {
+    // If voltage not high enough to EXIT the pseudo-sleep state
+    if (mv < NASTYSOLAR_RECHARGE_MV) {
         // Blink the blue LED
         pinMode(PIN_LED2, OUTPUT);
         digitalWrite(PIN_LED2, HIGH);
 
-        Bluefruit.autoConnLed(false);
-        Bluefruit.configPrphBandwidth(BANDWIDTH_MAX);
-        Bluefruit.begin();
-
         // Shutdown bluetooth for minimum power draw
+        Bluefruit.begin();
         Bluefruit.Advertising.stop();
         Bluefruit.setTxPower(-40); // Minimum power
 
@@ -50,9 +47,6 @@ void nastySolarBootCheck()
         digitalWrite(PIN_LED1, LOW);
         digitalWrite(PIN_LED2, LOW);
         digitalWrite(PIN_3V3_EN, LOW);
-
-        // // Enter "low power mode" (not using soft device)
-        // NRF_POWER->TASKS_LOWPWR = 1;
 
         sd_power_mode_set(NRF_POWER_MODE_LOWPWR);
 

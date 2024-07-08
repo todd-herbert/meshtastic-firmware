@@ -97,7 +97,7 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     int getNextIndex();
     int getPrevIndex();
 
-#if defined(T_WATCH_S3) || defined(RAK14014)
+#if defined(T_WATCH_S3) || defined(RAK14014) || defined(PRIVATE_HW) // Elecrow-CRT01262M
     void drawKeyboard(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
     String keyForCoordinates(uint x, uint y);
     bool shift = false;
@@ -150,7 +150,7 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     unsigned long lastTouchMillis = 0;
     String temporaryMessage;
 
-#if defined(T_WATCH_S3) || defined(RAK14014)
+#if defined(T_WATCH_S3) || defined(RAK14014) || defined(PRIVATE_HW) // Elecrow-CRT01262M
     Letter keyboard[2][4][10] = {{{{"Q", 20, 0, 0, 0, 0},
                                    {"W", 22, 0, 0, 0, 0},
                                    {"E", 17, 0, 0, 0, 0},

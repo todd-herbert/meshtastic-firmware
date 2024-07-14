@@ -58,3 +58,26 @@ void CardKbI2cImpl::init()
 #endif
     inputBroker->registerSource(this);
 }
+
+int32_t CardKbI2cImpl::runOnce()
+{
+    // How long to wait after boot before attempting to init cardKB?
+    constexpr uint32_t initAtMs = 5000;
+
+    // Wait for peripherals to stabilize before attempting to init
+    static bool initDone = false;
+    if (!initDone) {
+        // Short circuit: too soon for init
+        uint32_t now = millis();
+        if (now < initAtMs)
+            return initAtMs - now; // Let this thread sleep until we're due to init
+
+        // CardKB's onboard MCU should be running by now: attempt to init
+        init();
+        initDone = true;
+        return interval; // Possibly set to UINT32_MAX by init()
+    }
+
+    // Once initialized, let base class handle all timing
+    return KbI2cBase::runOnce();
+}

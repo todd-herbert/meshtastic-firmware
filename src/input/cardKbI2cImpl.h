@@ -12,6 +12,9 @@ class CardKbI2cImpl : public KbI2cBase
 {
   public:
     CardKbI2cImpl();
+
+  protected:
+    virtual int32_t runOnce() override; // Used only to delay init until system stabilizes
     void init();
 };
 

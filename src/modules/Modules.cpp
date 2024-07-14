@@ -136,7 +136,6 @@ void setupModules()
             upDownInterruptImpl1 = nullptr;
         }
         cardKbI2cImpl = new CardKbI2cImpl();
-        cardKbI2cImpl->init();
 #ifdef INPUTBROKER_MATRIX_TYPE
         kbMatrixImpl = new KbMatrixImpl();
         kbMatrixImpl->init();

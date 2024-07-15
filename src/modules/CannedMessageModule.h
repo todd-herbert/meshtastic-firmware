@@ -50,6 +50,7 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
 
   public:
     CannedMessageModule();
+    void begin();
     const char *getCurrentMessage();
     const char *getPrevMessage();
     const char *getNextMessage();

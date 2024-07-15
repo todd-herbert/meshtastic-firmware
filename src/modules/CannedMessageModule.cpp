@@ -40,25 +40,35 @@ CannedMessageModule::CannedMessageModule()
 {
     if (moduleConfig.canned_message.enabled || CANNED_MESSAGE_MODULE_ENABLE) {
         this->loadProtoForModule();
-        if ((this->splitConfiguredMessages() <= 0) && (cardkb_found.address == 0x00) && !INPUTBROKER_MATRIX_TYPE &&
-            !CANNED_MESSAGE_MODULE_ENABLE) {
-            LOG_INFO("CannedMessageModule: No messages are configured. Module is disabled\n");
+        if ((this->splitConfiguredMessages() <= 0) && !INPUTBROKER_MATRIX_TYPE && !CANNED_MESSAGE_MODULE_ENABLE) {
+            LOG_INFO("CannedMessageModule: No messages are configured\n");
             this->runState = CANNED_MESSAGE_RUN_STATE_DISABLED;
             disable();
         } else {
-            LOG_INFO("CannedMessageModule is enabled\n");
-
-            // T-Watch interface currently has no way to select destination type, so default to 'node'
-#if defined(T_WATCH_S3) || defined(RAK14014)
-            this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NODE;
-#endif
-
-            this->inputObserver.observe(inputBroker);
+            begin();
         }
     } else {
         this->runState = CANNED_MESSAGE_RUN_STATE_DISABLED;
         disable();
     }
+}
+
+// Called by code which has already checked whether or not to enable the module:
+// Constructor and CardKbI2cImpl::runOnce()
+void CannedMessageModule::begin()
+{
+    LOG_INFO("CannedMessageModule is enabled\n");
+
+    // T-Watch interface currently has no way to select destination type, so default to 'node'
+#if defined(T_WATCH_S3) || defined(RAK14014)
+    this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NODE;
+#endif
+
+    this->inputObserver.observe(inputBroker);
+
+    // runState is already init. with this valu, but we need to set it again,
+    // in case we are re-enabling the module during I2C keyboard init
+    this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
 }
 
 /**

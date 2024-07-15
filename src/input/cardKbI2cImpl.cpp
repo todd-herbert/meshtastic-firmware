@@ -2,6 +2,7 @@
 #include "InputBroker.h"
 #include "detect/ScanI2CTwoWire.h"
 #include "main.h"
+#include "modules/CannedMessageModule.h"
 
 CardKbI2cImpl *cardKbI2cImpl;
 
@@ -11,7 +12,7 @@ void CardKbI2cImpl::init()
 {
 #ifndef ARCH_PORTDUINO
     if (cardkb_found.address == 0x00) {
-        LOG_DEBUG("Rescanning for I2C keyboard\n");
+        LOG_DEBUG("Scanning for I2C keyboard\n");
         uint8_t i2caddr_scan[] = {CARDKB_ADDR, TDECK_KB_ADDR, BBQ10_KB_ADDR};
         uint8_t i2caddr_asize = 3;
         auto i2cScanner = std::unique_ptr<ScanI2CTwoWire>(new ScanI2CTwoWire());
@@ -57,6 +58,11 @@ void CardKbI2cImpl::init()
     }
 #endif
     inputBroker->registerSource(this);
+
+    // Canned Message module may have been disabled in constructor (if no messages pre-set)
+    // Start manually, now that I2C keyboard detected
+    if (moduleConfig.canned_message.enabled || CANNED_MESSAGE_MODULE_ENABLE)
+        cannedMessageModule->begin();
 }
 
 int32_t CardKbI2cImpl::runOnce()

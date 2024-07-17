@@ -68,7 +68,7 @@ void CardKbI2cImpl::init()
 int32_t CardKbI2cImpl::runOnce()
 {
     // How long to wait after boot before attempting to init cardKB?
-    constexpr uint32_t initAtMs = 5000;
+    constexpr uint32_t initAtMs = 10000;
 
     // Wait for peripherals to stabilize before attempting to init
     static bool initDone = false;

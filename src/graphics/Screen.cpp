@@ -1093,8 +1093,8 @@ static void drawNodes(OLEDDisplay *display, int16_t x, int16_t y, const NodeStat
 {
     char usersString[20];
     snprintf(usersString, sizeof(usersString), "%d/%d", nodeStatus->getNumOnline(), nodeStatus->getNumTotal());
-#if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS) || defined(ST7789_CS) || defined(USE_ST7789) ||          \
-     defined(HX8357_CS)) &&                                                                                                      \
+#if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7701_CS) || defined(ST7735_CS) || defined(ST7789_CS) ||           \
+     defined(USE_ST7789) || defined(HX8357_CS)) &&                                                                               \
     !defined(DISPLAY_FORCE_SMALL_FONTS)
     display->drawFastImage(x, y + 3, 8, 8, imgUser);
 #else
@@ -1285,8 +1285,8 @@ static int8_t prevFrame = -1;
 // Draw the arrow pointing to a node's location
 void Screen::drawNodeHeading(OLEDDisplay *display, int16_t compassX, int16_t compassY, uint16_t compassDiam, float headingRadian)
 {
-    Point tip(0.0f, 0.5f), tail(0.0f, -0.5f); // pointing up initially
-    float arrowOffsetX = 0.2f, arrowOffsetY = 0.2f;
+    Point tip(0.0f, 0.5f), tail(0.0f, -0.35f); // pointing up initially
+    float arrowOffsetX = 0.14f, arrowOffsetY = 1.0f;
     Point leftArrow(tip.x - arrowOffsetX, tip.y - arrowOffsetY), rightArrow(tip.x + arrowOffsetX, tip.y - arrowOffsetY);
 
     Point *arrowPoints[] = {&tip, &tail, &leftArrow, &rightArrow};
@@ -1296,9 +1296,19 @@ void Screen::drawNodeHeading(OLEDDisplay *display, int16_t compassX, int16_t com
         arrowPoints[i]->scale(compassDiam * 0.6);
         arrowPoints[i]->translate(compassX, compassY);
     }
+    /* Old arrow
     display->drawLine(tip.x, tip.y, tail.x, tail.y);
     display->drawLine(leftArrow.x, leftArrow.y, tip.x, tip.y);
     display->drawLine(rightArrow.x, rightArrow.y, tip.x, tip.y);
+    display->drawLine(leftArrow.x, leftArrow.y, tail.x, tail.y);
+    display->drawLine(rightArrow.x, rightArrow.y, tail.x, tail.y);
+    */
+#ifdef USE_EINK
+    display->drawTriangle(tip.x, tip.y, rightArrow.x, rightArrow.y, tail.x, tail.y);
+#else
+    display->fillTriangle(tip.x, tip.y, rightArrow.x, rightArrow.y, tail.x, tail.y);
+#endif
+    display->drawTriangle(tip.x, tip.y, leftArrow.x, leftArrow.y, tail.x, tail.y);
 }
 
 // Get a string representation of the time passed since something happened
@@ -1336,22 +1346,27 @@ void Screen::drawCompassNorth(OLEDDisplay *display, int16_t compassX, int16_t co
     // If north is supposed to be at the top of the compass we want rotation to be +0
     if (config.display.compass_north_top)
         myHeading = -0;
-
-    Point N1(-0.04f, 0.65f), N2(0.04f, 0.65f);
+    /* N sign points currently not deleted*/
+    Point N1(-0.04f, 0.65f), N2(0.04f, 0.65f); // N sign points (N1-N4)
     Point N3(-0.04f, 0.55f), N4(0.04f, 0.55f);
-    Point *rosePoints[] = {&N1, &N2, &N3, &N4};
+    Point NC1(0.00f, 0.50f); // north circle center point
+    Point *rosePoints[] = {&N1, &N2, &N3, &N4, &NC1};
 
     uint16_t compassDiam = Screen::getCompassDiam(SCREEN_WIDTH, SCREEN_HEIGHT);
 
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < 5; i++) {
         // North on compass will be negative of heading
         rosePoints[i]->rotate(-myHeading);
         rosePoints[i]->scale(compassDiam);
         rosePoints[i]->translate(compassX, compassY);
     }
+
+    /* changed the N sign to a small circle on the compass circle.
     display->drawLine(N1.x, N1.y, N3.x, N3.y);
     display->drawLine(N2.x, N2.y, N4.x, N4.y);
     display->drawLine(N1.x, N1.y, N4.x, N4.y);
+    */
+    display->drawCircle(NC1.x, NC1.y, 4); // North sign circle, 4px radius is sufficient for all displays.
 }
 
 uint16_t Screen::getCompassDiam(uint32_t displayWidth, uint32_t displayHeight)
@@ -1515,7 +1530,8 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
 #elif defined(USE_SSD1306)
     dispdev = new SSD1306Wire(address.address, -1, -1, geometry,
                               (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
-#elif defined(ST7735_CS) || defined(ILI9341_DRIVER) || defined(ST7789_CS) || defined(RAK14014) || defined(HX8357_CS)
+#elif defined(ST7735_CS) || defined(ILI9341_DRIVER) || defined(ST7701_CS) || defined(ST7789_CS) || defined(RAK14014) ||          \
+    defined(HX8357_CS)
     dispdev = new TFTDisplay(address.address, -1, -1, geometry,
                              (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
 #elif defined(USE_EINK) && !defined(USE_EINK_DYNAMICDISPLAY)
@@ -1654,6 +1670,11 @@ void Screen::setup()
     static_cast<SH1106Wire *>(dispdev)->setSubtype(7);
 #endif
 
+#if defined(USE_ST7789) && defined(TFT_MESH)
+    // Heltec T114 and T190: honor a custom text color, if defined in variant.h
+    static_cast<ST7789Spi *>(dispdev)->setRGB(TFT_MESH);
+#endif
+
     // Initialising the UI will init the display too.
     ui->init();
 
@@ -1707,8 +1728,11 @@ void Screen::setup()
     // Standard behaviour is to FLIP the screen (needed on T-Beam). If this config item is set, unflip it, and thereby logically
     // flip it. If you have a headache now, you're welcome.
     if (!config.display.flip_screen) {
-#if defined(ST7735_CS) || defined(ILI9341_DRIVER) || defined(ST7789_CS) || defined(RAK14014) || defined(HX8357_CS)
+#if defined(ST7701_CS) || defined(ST7735_CS) || defined(ILI9341_DRIVER) || defined(ST7701_CS) || defined(ST7789_CS) ||           \
+    defined(RAK14014) || defined(HX8357_CS)
         static_cast<TFTDisplay *>(dispdev)->flipScreenVertically();
+#elif defined(USE_ST7789)
+        static_cast<ST7789Spi *>(dispdev)->flipScreenVertically();
 #else
         dispdev->flipScreenVertically();
 #endif
@@ -2420,8 +2444,8 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 #ifdef ARCH_ESP32
         if (millis() - storeForwardModule->lastHeartbeat >
             (storeForwardModule->heartbeatInterval * 1200)) { // no heartbeat, overlap a bit
-#if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS) || defined(ST7789_CS) || defined(USE_ST7789) ||          \
-     defined(HX8357_CS)) &&                                                                                                      \
+#if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7701_CS) || defined(ST7735_CS) || defined(ST7789_CS) ||           \
+     defined(USE_ST7789) || defined(HX8357_CS)) &&                                                                               \
     !defined(DISPLAY_FORCE_SMALL_FONTS)
             display->drawFastImage(x + SCREEN_WIDTH - 14 - display->getStringWidth(ourId), y + 3 + FONT_HEIGHT_SMALL, 12, 8,
                                    imgQuestionL1);
@@ -2432,8 +2456,8 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                                    imgQuestion);
 #endif
         } else {
-#if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS) || defined(ST7789_CS) || defined(USE_ST7789) ||          \
-     defined(HX8357_CS)) &&                                                                                                      \
+#if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7701_CS) || defined(ST7735_CS) || defined(ST7789_CS) ||           \
+     defined(USE_ST7789) || defined(HX8357_CS)) &&                                                                               \
     !defined(DISPLAY_FORCE_SMALL_FONTS)
             display->drawFastImage(x + SCREEN_WIDTH - 18 - display->getStringWidth(ourId), y + 3 + FONT_HEIGHT_SMALL, 16, 8,
                                    imgSFL1);
@@ -2447,8 +2471,8 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 #endif
     } else {
         // TODO: Raspberry Pi supports more than just the one screen size
-#if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS) || defined(ST7789_CS) || defined(USE_ST7789) ||          \
-     defined(HX8357_CS) || ARCH_PORTDUINO) &&                                                                                    \
+#if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7701_CS) || defined(ST7735_CS) || defined(ST7789_CS) ||           \
+     defined(USE_ST7789) || defined(HX8357_CS) || ARCH_PORTDUINO) &&                                                             \
     !defined(DISPLAY_FORCE_SMALL_FONTS)
         display->drawFastImage(x + SCREEN_WIDTH - 14 - display->getStringWidth(ourId), y + 3 + FONT_HEIGHT_SMALL, 12, 8,
                                imgInfoL1);

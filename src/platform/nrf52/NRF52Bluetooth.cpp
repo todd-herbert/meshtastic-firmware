@@ -55,7 +55,6 @@ static BluetoothPhoneAPI *bluetoothPhoneAPI;
 
 void onConnect(uint16_t conn_handle)
 {
-
     // Get the reference to current connection
     BLEConnection *connection = Bluefruit.Connection(conn_handle);
     connectionHandle = conn_handle;
@@ -70,8 +69,10 @@ void onConnect(uint16_t conn_handle)
  */
 void onDisconnect(uint16_t conn_handle, uint8_t reason)
 {
-    // FIXME - we currently assume only one active connection
     LOG_INFO("BLE Disconnected, reason = 0x%x\n", reason);
+    if (bluetoothPhoneAPI) {
+        bluetoothPhoneAPI->close();
+    }
 }
 void onCccd(uint16_t conn_hdl, BLECharacteristic *chr, uint16_t cccd_value)
 {
@@ -140,10 +141,19 @@ void onFromRadioAuthorize(uint16_t conn_hdl, BLECharacteristic *chr, ble_gatts_e
     }
     authorizeRead(conn_hdl);
 }
+// Last ToRadio value received from the phone
+static uint8_t lastToRadio[MAX_TO_FROM_RADIO_SIZE];
+
 void onToRadioWrite(uint16_t conn_hdl, BLECharacteristic *chr, uint8_t *data, uint16_t len)
 {
     LOG_INFO("toRadioWriteCb data %p, len %u\n", data, len);
-    bluetoothPhoneAPI->handleToRadio(data, len);
+    if (memcmp(lastToRadio, data, len) != 0) {
+        LOG_DEBUG("New ToRadio packet\n");
+        memcpy(lastToRadio, data, len);
+        bluetoothPhoneAPI->handleToRadio(data, len);
+    } else {
+        LOG_DEBUG("Dropping duplicate ToRadio packet we just saw\n");
+    }
 }
 
 void setupMeshService(void)
@@ -198,8 +208,13 @@ void NRF52Bluetooth::shutdown()
 {
     // Shutdown bluetooth for minimum power draw
     LOG_INFO("Disable NRF52 bluetooth\n");
-    if (connectionHandle != 0) {
-        Bluefruit.disconnect(connectionHandle);
+    uint8_t connection_num = Bluefruit.connected();
+    if (connection_num) {
+        for (uint8_t i = 0; i < connection_num; i++) {
+            LOG_INFO("NRF52 bluetooth disconnecting handle %d\n", i);
+            Bluefruit.disconnect(i);
+        }
+        delay(100); // wait for ondisconnect;
     }
     Bluefruit.Advertising.stop();
 }

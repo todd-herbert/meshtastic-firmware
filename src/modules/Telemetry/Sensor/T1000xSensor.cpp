@@ -95,7 +95,7 @@ float T1000xSensor::getTemp()
 
     Vout = ntc_vot;
     Rt = (HEATER_NTC_RP * vcc_vot) / Vout - HEATER_NTC_RP;
-    for (u8i = 0; u8i < 136; u8i++) {
+    for (u8i = 0; u8i < 135; u8i++) {
         if (Rt >= ntc_res2[u8i]) {
             break;
         }
@@ -108,6 +108,9 @@ float T1000xSensor::getTemp()
 
 bool T1000xSensor::getMetrics(meshtastic_Telemetry *measurement)
 {
+    measurement->variant.environment_metrics.has_temperature = true;
+    measurement->variant.environment_metrics.has_lux = true;
+
     measurement->variant.environment_metrics.temperature = getTemp();
     measurement->variant.environment_metrics.lux = getLux();
     return true;

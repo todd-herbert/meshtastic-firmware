@@ -13,10 +13,6 @@
 #include "mqtt/MQTT.h"
 #endif
 
-/// 16 bytes of random PSK for our _public_ default channel that all devices power up on (AES128)
-static const uint8_t defaultpsk[] = {0xd4, 0xf1, 0xbb, 0x3a, 0x20, 0x29, 0x07, 0x59,
-                                     0xf0, 0xbc, 0xff, 0xab, 0xcf, 0x4e, 0x69, 0x01};
-
 Channels channels;
 
 const char *Channels::adminChannel = "admin";
@@ -97,7 +93,7 @@ void Channels::initDefaultChannel(ChannelIndex chIndex)
     channelSettings.psk.bytes[0] = defaultpskIndex;
     channelSettings.psk.size = 1;
     strncpy(channelSettings.name, "", sizeof(channelSettings.name));
-    channelSettings.module_settings.position_precision = 32; // default to sending location on the primary channel
+    channelSettings.module_settings.position_precision = 13; // default to sending location on the primary channel
     channelSettings.has_module_settings = true;
 
     ch.has_settings = true;
@@ -309,12 +305,14 @@ const char *Channels::getName(size_t chIndex)
     return channelName;
 }
 
-bool Channels::isDefaultChannel(const meshtastic_Channel &ch)
+bool Channels::isDefaultChannel(ChannelIndex chIndex)
 {
+    const auto &ch = getByIndex(chIndex);
     if (ch.settings.psk.size == 1 && ch.settings.psk.bytes[0] == 1) {
+        const char *name = getName(chIndex);
         const char *presetName = DisplayFormatters::getModemPresetDisplayName(config.lora.modem_preset, false);
         // Check if the name is the default derived from the modem preset
-        if (strcmp(ch.settings.name, presetName) == 0)
+        if (strcmp(name, presetName) == 0)
             return true;
     }
     return false;
@@ -327,8 +325,7 @@ bool Channels::hasDefaultChannel()
         return false;
     // Check if any of the channels are using the default name and PSK
     for (size_t i = 0; i < getNumChannels(); i++) {
-        const auto &ch = getByIndex(i);
-        if (isDefaultChannel(ch))
+        if (isDefaultChannel(i))
             return true;
     }
     return false;

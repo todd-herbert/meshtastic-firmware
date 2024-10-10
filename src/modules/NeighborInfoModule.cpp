@@ -3,6 +3,7 @@
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "RTC.h"
+#include <Throttle.h>
 
 NeighborInfoModule *neighborInfoModule;
 
@@ -83,11 +84,11 @@ uint32_t NeighborInfoModule::collectNeighborInfo(meshtastic_NeighborInfo *neighb
 */
 void NeighborInfoModule::cleanUpNeighbors()
 {
-    uint32_t now = getTime();
     NodeNum my_node_id = nodeDB->getNodeNum();
     for (auto it = neighbors.rbegin(); it != neighbors.rend();) {
         // We will remove a neighbor if we haven't heard from them in twice the broadcast interval
-        if ((now - it->last_rx_time > it->node_broadcast_interval_secs * 2) && (it->node_id != my_node_id)) {
+        if (!Throttle::isWithinTimespanMs(it->last_rx_time, it->node_broadcast_interval_secs * 2) &&
+            (it->node_id != my_node_id)) {
             LOG_DEBUG("Removing neighbor with node ID 0x%x\n", it->node_id);
             it = std::vector<meshtastic_Neighbor>::reverse_iterator(
                 neighbors.erase(std::next(it).base())); // Erase the element and update the iterator
@@ -107,6 +108,7 @@ void NeighborInfoModule::sendNeighborInfo(NodeNum dest, bool wantReplies)
     // because we want to get neighbors for the next cycle
     p->to = dest;
     p->decoded.want_response = wantReplies;
+    p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
     printNeighborInfo("SENDING", &neighborInfo);
     service->sendToMesh(p, RX_SRC_LOCAL, true);
 }
@@ -120,8 +122,7 @@ int32_t NeighborInfoModule::runOnce()
     if (airTime->isTxAllowedChannelUtil(true) && airTime->isTxAllowedAirUtil()) {
         sendNeighborInfo(NODENUM_BROADCAST, false);
     }
-    return Default::getConfiguredOrDefaultMsScaled(moduleConfig.neighbor_info.update_interval, default_broadcast_interval_secs,
-                                                   numOnlineNodes);
+    return Default::getConfiguredOrDefaultMs(moduleConfig.neighbor_info.update_interval, default_neighbor_info_broadcast_secs);
 }
 
 /*

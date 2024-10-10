@@ -7,7 +7,6 @@
 
 #include <Utility.h>
 #include <assert.h>
-#include <time.h>
 
 #include "PortduinoGlue.h"
 #include "linux/gpio/LinuxGPIOPin.h"
@@ -81,6 +80,7 @@ void portduinoSetup()
                                       irq,
                                       busy,
                                       reset,
+                                      sx126x_ant_sw,
                                       txen,
                                       rxen,
                                       displayDC,
@@ -99,6 +99,7 @@ void portduinoSetup()
     settingsStrings[spidev] = "";
     settingsStrings[displayspidev] = "";
     settingsMap[spiSpeed] = 2000000;
+    settingsMap[ascii_logs] = !isatty(1);
 
     YAML::Node yamlConfig;
 
@@ -152,6 +153,10 @@ void portduinoSetup()
                 settingsMap[logoutputlevel] = level_error;
             }
             settingsStrings[traceFilename] = yamlConfig["Logging"]["TraceFile"].as<std::string>("");
+            if (yamlConfig["Logging"]["AsciiLogs"]) {
+                // Default is !isatty(1) but can be set explicitly in config.yaml
+                settingsMap[ascii_logs] = yamlConfig["Logging"]["AsciiLogs"].as<bool>();
+            }
         }
         if (yamlConfig["Lora"]) {
             settingsMap[use_sx1262] = false;
@@ -176,6 +181,7 @@ void portduinoSetup()
             settingsMap[reset] = yamlConfig["Lora"]["Reset"].as<int>(RADIOLIB_NC);
             settingsMap[txen] = yamlConfig["Lora"]["TXen"].as<int>(RADIOLIB_NC);
             settingsMap[rxen] = yamlConfig["Lora"]["RXen"].as<int>(RADIOLIB_NC);
+            settingsMap[sx126x_ant_sw] = yamlConfig["Lora"]["SX126X_ANT_SW"].as<int>(RADIOLIB_NC);
             settingsMap[gpiochip] = yamlConfig["Lora"]["gpiochip"].as<int>(0);
             settingsMap[ch341Quirk] = yamlConfig["Lora"]["ch341_quirk"].as<bool>(false);
             settingsMap[spiSpeed] = yamlConfig["Lora"]["spiSpeed"].as<int>(2000000);
@@ -301,6 +307,8 @@ void portduinoSetup()
     gpioInit(max_GPIO + 1); // Done here so we can inform Portduino how many GPIOs we need.
 
     // Need to bind all the configured GPIO pins so they're not simulated
+    // TODO: Can we do this in the for loop above?
+    // TODO: If one of these fails, we should log and terminate
     if (settingsMap.count(cs) > 0 && settingsMap[cs] != RADIOLIB_NC) {
         if (initGPIOPin(settingsMap[cs], gpioChipName) != ERRNO_OK) {
             settingsMap[cs] = RADIOLIB_NC;
@@ -319,6 +327,11 @@ void portduinoSetup()
     if (settingsMap.count(reset) > 0 && settingsMap[reset] != RADIOLIB_NC) {
         if (initGPIOPin(settingsMap[reset], gpioChipName) != ERRNO_OK) {
             settingsMap[reset] = RADIOLIB_NC;
+        }
+    }
+    if (settingsMap.count(sx126x_ant_sw) > 0 && settingsMap[sx126x_ant_sw] != RADIOLIB_NC) {
+        if (initGPIOPin(settingsMap[sx126x_ant_sw], gpioChipName) != ERRNO_OK) {
+            settingsMap[sx126x_ant_sw] = RADIOLIB_NC;
         }
     }
     if (settingsMap.count(user) > 0 && settingsMap[user] != RADIOLIB_NC) {
@@ -365,6 +378,7 @@ void portduinoSetup()
             exit(EXIT_FAILURE);
         }
     }
+
     return;
 }
 

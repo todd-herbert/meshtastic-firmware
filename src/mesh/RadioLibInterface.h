@@ -61,11 +61,6 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      */
     static void isrTxLevel0(), isrLevel0Common(PendingISR code);
 
-    /**
-     * Debugging counts
-     */
-    uint32_t rxBad = 0, rxGood = 0, txGood = 0;
-
     MeshPacketQueue txQueue = MeshPacketQueue(MAX_TX_QUEUE);
 
   protected:
@@ -108,6 +103,11 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      * Enable a particular ISR callback glue function
      */
     virtual void enableInterrupt(void (*)()) = 0;
+
+    /**
+     * Debugging counts
+     */
+    uint32_t rxBad = 0, rxGood = 0, txGood = 0;
 
   public:
     RadioLibInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst,
@@ -167,6 +167,10 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     meshtastic_QueueStatus getQueueStatus();
 
   protected:
+    uint32_t activeReceiveStart = 0;
+
+    bool receiveDetected(uint16_t irq, ulong syncWordHeaderValidFlag, ulong preambleDetectedFlag);
+
     /** Do any hardware setup needed on entry into send configuration for the radio.
      * Subclasses can customize, but must also call this base method */
     virtual void configHardwareForSend();

@@ -7,6 +7,7 @@
 #include "NAU7802Sensor.h"
 #include "SafeFile.h"
 #include "TelemetrySensor.h"
+#include <Throttle.h>
 #include <pb_decode.h>
 #include <pb_encode.h>
 
@@ -40,11 +41,12 @@ bool NAU7802Sensor::getMetrics(meshtastic_Telemetry *measurement)
     uint32_t start = millis();
     while (!nau7802.available()) {
         delay(100);
-        if (millis() - start > 1000) {
+        if (!Throttle::isWithinTimespanMs(start, 1000)) {
             nau7802.powerDown();
             return false;
         }
     }
+    measurement->variant.environment_metrics.has_weight = true;
     // Check if we have correct calibration values after powerup
     LOG_DEBUG("Offset: %d, Calibration factor: %.2f\n", nau7802.getZeroOffset(), nau7802.getCalibrationFactor());
     measurement->variant.environment_metrics.weight = nau7802.getWeight() / 1000; // sample is in kg

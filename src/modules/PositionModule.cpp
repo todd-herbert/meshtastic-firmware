@@ -12,6 +12,7 @@
 #include "gps/GeoCoord.h"
 #include "main.h"
 #include "mesh/compression/unishox2.h"
+#include "meshUtils.h"
 #include "meshtastic/atak.pb.h"
 #include "sleep.h"
 #include "target_specific.h"
@@ -90,7 +91,6 @@ bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
         // will always be an equivalent or lesser RTCQuality (RTCQualityNTP or RTCQualityNet).
         force = true;
 #endif
-
         // Set from phone RTC Quality to RTCQualityNTP since it should be approximately so
         trySetRtc(p, isLocal, force);
     }
@@ -126,12 +126,33 @@ void PositionModule::alterReceivedProtobuf(meshtastic_MeshPacket &mp, meshtastic
 
 void PositionModule::trySetRtc(meshtastic_Position p, bool isLocal, bool forceUpdate)
 {
+    if (hasQualityTimesource() && !isLocal) {
+        LOG_DEBUG("Ignoring time from mesh because we have a GPS, RTC, or Phone/NTP time source in the past day\n");
+        return;
+    }
+    if (!isLocal && p.location_source < meshtastic_Position_LocSource_LOC_INTERNAL) {
+        LOG_DEBUG("Ignoring time from mesh because it has a unknown or manual source\n");
+        return;
+    }
     struct timeval tv;
     uint32_t secs = p.time;
 
     tv.tv_sec = secs;
     tv.tv_usec = 0;
+
     perhapsSetRTC(isLocal ? RTCQualityNTP : RTCQualityFromNet, &tv, forceUpdate);
+}
+
+bool PositionModule::hasQualityTimesource()
+{
+    bool setFromPhoneOrNtpToday =
+        lastSetFromPhoneNtpOrGps == 0 ? false : Throttle::isWithinTimespanMs(lastSetFromPhoneNtpOrGps, SEC_PER_DAY * 1000UL);
+#if MESHTASTIC_EXCLUDE_GPS
+    bool hasGpsOrRtc = (rtc_found.address != ScanI2C::ADDRESS_NONE.address);
+#else
+    bool hasGpsOrRtc = (gps && gps->isConnected()) || (rtc_found.address != ScanI2C::ADDRESS_NONE.address);
+#endif
+    return hasGpsOrRtc || setFromPhoneOrNtpToday;
 }
 
 meshtastic_MeshPacket *PositionModule::allocReply()
@@ -175,16 +196,27 @@ meshtastic_MeshPacket *PositionModule::allocReply()
         p.longitude_i = localPosition.longitude_i;
     }
     p.precision_bits = precision;
-    p.time = localPosition.time;
+    p.has_latitude_i = true;
+    p.has_longitude_i = true;
+    p.time = getValidTime(RTCQualityNTP) > 0 ? getValidTime(RTCQualityNTP) : localPosition.time;
+
+    if (config.position.fixed_position) {
+        p.location_source = meshtastic_Position_LocSource_LOC_MANUAL;
+    }
 
     if (pos_flags & meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE) {
-        if (pos_flags & meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE_MSL)
+        if (pos_flags & meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE_MSL) {
             p.altitude = localPosition.altitude;
-        else
+            p.has_altitude = true;
+        } else {
             p.altitude_hae = localPosition.altitude_hae;
+            p.has_altitude_hae = true;
+        }
 
-        if (pos_flags & meshtastic_Config_PositionConfig_PositionFlags_GEOIDAL_SEPARATION)
+        if (pos_flags & meshtastic_Config_PositionConfig_PositionFlags_GEOIDAL_SEPARATION) {
             p.altitude_geoidal_separation = localPosition.altitude_geoidal_separation;
+            p.has_altitude_geoidal_separation = true;
+        }
     }
 
     if (pos_flags & meshtastic_Config_PositionConfig_PositionFlags_DOP) {
@@ -204,11 +236,15 @@ meshtastic_MeshPacket *PositionModule::allocReply()
     if (pos_flags & meshtastic_Config_PositionConfig_PositionFlags_SEQ_NO)
         p.seq_number = localPosition.seq_number;
 
-    if (pos_flags & meshtastic_Config_PositionConfig_PositionFlags_HEADING)
+    if (pos_flags & meshtastic_Config_PositionConfig_PositionFlags_HEADING) {
         p.ground_track = localPosition.ground_track;
+        p.has_ground_track = true;
+    }
 
-    if (pos_flags & meshtastic_Config_PositionConfig_PositionFlags_SPEED)
+    if (pos_flags & meshtastic_Config_PositionConfig_PositionFlags_SPEED) {
         p.ground_speed = localPosition.ground_speed;
+        p.has_ground_speed = true;
+    }
 
     // Strip out any time information before sending packets to other nodes - to keep the wire size small (and because other
     // nodes shouldn't trust it anyways) Note: we allow a device with a local GPS or NTP to include the time, so that devices
@@ -238,7 +274,7 @@ meshtastic_MeshPacket *PositionModule::allocAtakPli()
 
     meshtastic_TAKPacket takPacket = {.is_compressed = true,
                                       .has_contact = true,
-                                      .contact = {0},
+                                      .contact = meshtastic_Contact_init_default,
                                       .has_group = true,
                                       .group = {meshtastic_MemberRole_TeamMember, meshtastic_Team_Cyan},
                                       .has_status = true,
@@ -247,13 +283,13 @@ meshtastic_MeshPacket *PositionModule::allocAtakPli()
                                               .battery = powerStatus->getBatteryChargePercent(),
                                           },
                                       .which_payload_variant = meshtastic_TAKPacket_pli_tag,
-                                      {.pli = {
-                                           .latitude_i = localPosition.latitude_i,
-                                           .longitude_i = localPosition.longitude_i,
-                                           .altitude = localPosition.altitude_hae,
-                                           .speed = localPosition.ground_speed,
-                                           .course = static_cast<uint16_t>(localPosition.ground_track),
-                                       }}};
+                                      .payload_variant = {.pli = {
+                                                              .latitude_i = localPosition.latitude_i,
+                                                              .longitude_i = localPosition.longitude_i,
+                                                              .altitude = localPosition.altitude_hae,
+                                                              .speed = localPosition.ground_speed,
+                                                              .course = static_cast<uint16_t>(localPosition.ground_track),
+                                                          }}};
 
     auto length = unishox2_compress_lines(owner.long_name, strlen(owner.long_name), takPacket.contact.device_callsign,
                                           sizeof(takPacket.contact.device_callsign) - 1, USX_PSET_DFLT, NULL);
@@ -286,7 +322,8 @@ void PositionModule::sendOurPosition(NodeNum dest, bool wantReplies, uint8_t cha
     if (channels.getByIndex(channel).settings.has_module_settings) {
         precision = channels.getByIndex(channel).settings.module_settings.position_precision;
     } else if (channels.getByIndex(channel).role == meshtastic_Channel_Role_PRIMARY) {
-        precision = 32;
+        // backwards compatibility for Primary channels created before position_precision was set by default
+        precision = 13;
     } else {
         precision = 0;
     }
@@ -311,8 +348,8 @@ void PositionModule::sendOurPosition(NodeNum dest, bool wantReplies, uint8_t cha
 
     service->sendToMesh(p, RX_SRC_LOCAL, true);
 
-    if ((config.device.role == meshtastic_Config_DeviceConfig_Role_TRACKER ||
-         config.device.role == meshtastic_Config_DeviceConfig_Role_TAK_TRACKER) &&
+    if (IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_TRACKER,
+                  meshtastic_Config_DeviceConfig_Role_TAK_TRACKER) &&
         config.power.is_power_saving) {
         LOG_DEBUG("Starting next execution in 5 seconds and then going to sleep.\n");
         sleepOnNextExecution = true;

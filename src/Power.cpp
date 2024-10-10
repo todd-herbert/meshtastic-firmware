@@ -13,6 +13,7 @@
 #include "power.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
+#include "Throttle.h"
 #include "buzz/buzz.h"
 #include "configuration.h"
 #include "main.h"
@@ -30,6 +31,7 @@
 #if HAS_WIFI
 #include <WiFi.h>
 #endif
+
 #endif
 
 #ifndef DELAY_FOREVER
@@ -73,6 +75,15 @@ static const uint8_t ext_chrg_detect_value = EXT_CHRG_DETECT_VALUE;
 INA260Sensor ina260Sensor;
 INA219Sensor ina219Sensor;
 INA3221Sensor ina3221Sensor;
+#endif
+
+#if !MESHTASTIC_EXCLUDE_I2C && !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
+#include "modules/Telemetry/Sensor/MAX17048Sensor.h"
+#include <utility>
+extern std::pair<uint8_t, TwoWire *> nodeTelemetrySensorsMap[_meshtastic_TelemetrySensorType_MAX + 1];
+#if HAS_TELEMETRY && (!MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR || !MESHTASTIC_EXCLUDE_POWER_TELEMETRY)
+MAX17048Sensor max17048Sensor;
+#endif
 #endif
 
 #if HAS_RAKPROT && !defined(ARCH_PORTDUINO)
@@ -136,11 +147,40 @@ using namespace meshtastic;
  */
 static HasBatteryLevel *batteryLevel; // Default to NULL for no battery level sensor
 
+#ifdef BATTERY_PIN
+
+static void adcEnable()
+{
+#ifdef ADC_CTRL // enable adc voltage divider when we need to read
+#ifdef ADC_USE_PULLUP
+    pinMode(ADC_CTRL, INPUT_PULLUP);
+#else
+    pinMode(ADC_CTRL, OUTPUT);
+    digitalWrite(ADC_CTRL, ADC_CTRL_ENABLED);
+#endif
+    delay(10);
+#endif
+}
+
+static void adcDisable()
+{
+#ifdef ADC_CTRL // disable adc voltage divider when we need to read
+#ifdef ADC_USE_PULLUP
+    pinMode(ADC_CTRL, INPUT_PULLDOWN);
+#else
+    digitalWrite(ADC_CTRL, !ADC_CTRL_ENABLED);
+#endif
+#endif
+}
+
+#endif
+
 /**
  * A simple battery level sensor that assumes the battery voltage is attached via a voltage-divider to an analog input
  */
 class AnalogBatteryLevel : public HasBatteryLevel
 {
+  public:
     /**
      * Battery state of charge, from 0 to 100 or -1 for unknown
      */
@@ -220,31 +260,25 @@ class AnalogBatteryLevel : public HasBatteryLevel
             config.power.adc_multiplier_override > 0 ? config.power.adc_multiplier_override : ADC_MULTIPLIER;
         // Do not call analogRead() often.
         const uint32_t min_read_interval = 5000;
-        if (millis() - last_read_time_ms > min_read_interval) {
+        if (!Throttle::isWithinTimespanMs(last_read_time_ms, min_read_interval)) {
             last_read_time_ms = millis();
 
             uint32_t raw = 0;
             float scaled = 0;
 
+            adcEnable();
 #ifdef ARCH_ESP32 // ADC block for espressif platforms
             raw = espAdcRead();
             scaled = esp_adc_cal_raw_to_voltage(raw, adc_characs);
             scaled *= operativeAdcMultiplier;
-#else           // block for all other platforms
-#ifdef ADC_CTRL // enable adc voltage divider when we need to read
-            pinMode(ADC_CTRL, OUTPUT);
-            digitalWrite(ADC_CTRL, ADC_CTRL_ENABLED);
-            delay(10);
-#endif
+#else // block for all other platforms
             for (uint32_t i = 0; i < BATTERY_SENSE_SAMPLES; i++) {
                 raw += analogRead(BATTERY_PIN);
             }
             raw = raw / BATTERY_SENSE_SAMPLES;
             scaled = operativeAdcMultiplier * ((1000 * AREF_VOLTAGE) / pow(2, BATTERY_SENSE_RESOLUTION_BITS)) * raw;
-#ifdef ADC_CTRL // disable adc voltage divider when we need to read
-            digitalWrite(ADC_CTRL, !ADC_CTRL_ENABLED);
 #endif
-#endif
+            adcDisable();
 
             if (!initial_read_done) {
                 // Flush the smoothing filter with an ADC reading, if the reading is plausibly correct
@@ -275,11 +309,6 @@ class AnalogBatteryLevel : public HasBatteryLevel
         uint8_t raw_c = 0; // raw reading counter
 
 #ifndef BAT_MEASURE_ADC_UNIT // ADC1
-#ifdef ADC_CTRL              // enable adc voltage divider when we need to read
-        pinMode(ADC_CTRL, OUTPUT);
-        digitalWrite(ADC_CTRL, ADC_CTRL_ENABLED);
-        delay(10);
-#endif
         for (int i = 0; i < BATTERY_SENSE_SAMPLES; i++) {
             int val_ = adc1_get_raw(adc_channel);
             if (val_ >= 0) { // save only valid readings
@@ -288,18 +317,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
             }
             // delayMicroseconds(100);
         }
-#ifdef ADC_CTRL // disable adc voltage divider when we need to read
-        digitalWrite(ADC_CTRL, !ADC_CTRL_ENABLED);
-#endif
-#else // ADC2
-#ifdef ADC_CTRL
-#if defined(HELTEC_WIRELESS_PAPER) || defined(HELTEC_WIRELESS_PAPER_V1_0)
-        pinMode(ADC_CTRL, OUTPUT);
-        digitalWrite(ADC_CTRL, LOW); // ACTIVE LOW
-        delay(10);
-#endif
-#endif // End ADC_CTRL
-
+#else                            // ADC2
 #ifdef CONFIG_IDF_TARGET_ESP32S3 // ESP32S3
         // ADC2 wifi bug workaround not required, breaks compile
         // On ESP32S3, ADC2 can take turns with Wifi (?)
@@ -333,12 +351,6 @@ class AnalogBatteryLevel : public HasBatteryLevel
             raw_c++;
         }
 #endif // BAT_MEASURE_ADC_UNIT
-
-#ifdef ADC_CTRL
-#if defined(HELTEC_WIRELESS_PAPER) || defined(HELTEC_WIRELESS_PAPER_V1_0)
-        digitalWrite(ADC_CTRL, HIGH);
-#endif
-#endif // End ADC_CTRL
 
 #endif // End BAT_MEASURE_ADC_UNIT
         return (raw / (raw_c < 1 ? 1 : raw_c));
@@ -555,7 +567,12 @@ bool Power::analogInit()
  */
 bool Power::setup()
 {
-    bool found = axpChipInit() || analogInit();
+    // initialise one power sensor (only)
+    bool found = axpChipInit();
+    if (!found)
+        found = lipoInit();
+    if (!found)
+        found = analogInit();
 
 #ifdef NRF_APM
     found = true;
@@ -1047,3 +1064,81 @@ bool Power::axpChipInit()
     return false;
 #endif
 }
+
+#if !MESHTASTIC_EXCLUDE_I2C && !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
+
+/**
+ * Wrapper class for an I2C MAX17048 Lipo battery sensor.
+ */
+class LipoBatteryLevel : public HasBatteryLevel
+{
+  private:
+    MAX17048Singleton *max17048 = nullptr;
+
+  public:
+    /**
+     * Init the I2C MAX17048 Lipo battery level sensor
+     */
+    bool runOnce()
+    {
+        if (max17048 == nullptr) {
+            max17048 = MAX17048Singleton::GetInstance();
+        }
+
+        // try to start if the sensor has been detected
+        if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_MAX17048].first != 0) {
+            return max17048->runOnce(nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_MAX17048].second);
+        }
+        return false;
+    }
+
+    /**
+     * Battery state of charge, from 0 to 100 or -1 for unknown
+     */
+    virtual int getBatteryPercent() override { return max17048->getBusBatteryPercent(); }
+
+    /**
+     * The raw voltage of the battery in millivolts, or NAN if unknown
+     */
+    virtual uint16_t getBattVoltage() override { return max17048->getBusVoltageMv(); }
+
+    /**
+     * return true if there is a battery installed in this unit
+     */
+    virtual bool isBatteryConnect() override { return max17048->isBatteryConnected(); }
+
+    /**
+     * return true if there is an external power source detected
+     */
+    virtual bool isVbusIn() override { return max17048->isExternallyPowered(); }
+
+    /**
+     * return true if the battery is currently charging
+     */
+    virtual bool isCharging() override { return max17048->isBatteryCharging(); }
+};
+
+LipoBatteryLevel lipoLevel;
+
+/**
+ * Init the Lipo battery level sensor
+ */
+bool Power::lipoInit()
+{
+    bool result = lipoLevel.runOnce();
+    LOG_DEBUG("Power::lipoInit lipo sensor is %s\n", result ? "ready" : "not ready yet");
+    if (!result)
+        return false;
+    batteryLevel = &lipoLevel;
+    return true;
+}
+
+#else
+/**
+ * The Lipo battery level sensor is unavailable - default to AnalogBatteryLevel
+ */
+bool Power::lipoInit()
+{
+    return false;
+}
+#endif

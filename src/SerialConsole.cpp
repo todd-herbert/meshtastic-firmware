@@ -1,6 +1,8 @@
 #include "SerialConsole.h"
+#include "Default.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
+#include "Throttle.h"
 #include "configuration.h"
 #include "time.h"
 
@@ -44,10 +46,11 @@ SerialConsole::SerialConsole() : StreamAPI(&Port), RedirectablePrint(&Port), con
     Port.setRX(SERIAL2_RX);
 #endif
     Port.begin(SERIAL_BAUD);
-#if defined(ARCH_NRF52) || defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32S3) || defined(ARCH_RP2040)
+#if defined(ARCH_NRF52) || defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32S3) || defined(ARCH_RP2040) ||   \
+    defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32C6)
     time_t timeout = millis();
     while (!Port) {
-        if ((millis() - timeout) < 5000) {
+        if (Throttle::isWithinTimespanMs(timeout, FIVE_SECONDS_MS)) {
             delay(100);
         } else {
             break;
@@ -72,8 +75,7 @@ void SerialConsole::flush()
 // For the serial port we can't really detect if any client is on the other side, so instead just look for recent messages
 bool SerialConsole::checkIsConnected()
 {
-    uint32_t now = millis();
-    return (now - lastContactMsec) < SERIAL_CONNECTION_TIMEOUT;
+    return Throttle::isWithinTimespanMs(lastContactMsec, SERIAL_CONNECTION_TIMEOUT);
 }
 
 /**
@@ -83,7 +85,7 @@ bool SerialConsole::checkIsConnected()
 bool SerialConsole::handleToRadio(const uint8_t *buf, size_t len)
 {
     // only talk to the API once the configuration has been loaded and we're sure the serial port is not disabled.
-    if (config.has_lora && config.device.serial_enabled) {
+    if (config.has_lora && config.security.serial_enabled) {
         // Switch to protobufs for log messages
         usingProtobufs = true;
         canWrite = true;
@@ -96,7 +98,7 @@ bool SerialConsole::handleToRadio(const uint8_t *buf, size_t len)
 
 void SerialConsole::log_to_serial(const char *logLevel, const char *format, va_list arg)
 {
-    if (usingProtobufs && config.device.debug_log_enabled) {
+    if (usingProtobufs && config.security.debug_log_api_enabled) {
         meshtastic_LogRecord_Level ll = meshtastic_LogRecord_Level_UNSET; // default to unset
         switch (logLevel[0]) {
         case 'D':

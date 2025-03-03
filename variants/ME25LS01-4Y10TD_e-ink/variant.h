@@ -105,7 +105,6 @@ static const uint8_t SCK = PIN_SPI_SCK;
  * eink display pins
  */
 
-#define USE_EINK
 #define PIN_EINK_CS (32 + 0)   // EPD_CS
 #define PIN_EINK_BUSY (0 + 19) // EPD_BUSY
 #define PIN_EINK_DC (0 + 24)   // EPD_D/C

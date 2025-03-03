@@ -59,14 +59,13 @@ void TwoButton::stop()
 
 // Configures the wiring and logic of either button
 // Called when outlining your NicheGraphics implementation, in variant/nicheGraphics.cpp
-void TwoButton::setWiring(uint8_t whichButton, uint8_t pin, bool internalPullup)
+void TwoButton::setWiring(uint8_t whichButton, uint8_t pin, bool activeLogic, uint32_t mode)
 {
     assert(whichButton < 2);
     buttons[whichButton].pin = pin;
-    buttons[whichButton].activeLogic = LOW;
-    buttons[whichButton].mode = internalPullup ? INPUT_PULLUP : INPUT; // fix me
+    buttons[whichButton].activeLogic = activeLogic;
 
-    pinMode(buttons[whichButton].pin, buttons[whichButton].mode);
+    pinMode(buttons[whichButton].pin, mode);
 }
 
 void TwoButton::setTiming(uint8_t whichButton, uint32_t debounceMs, uint32_t longpressMs)

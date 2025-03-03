@@ -70,7 +70,7 @@ void setupNicheGraphics()
     */
 
     // Specify default settings
-    inkhud->persistence->settings.userTiles.maxCount = 2; // Two applets side-by-side
+    inkhud->persistence->settings.userTiles.count = 2;
     inkhud->persistence->settings.rotation = 0;
 
     // Pick applets

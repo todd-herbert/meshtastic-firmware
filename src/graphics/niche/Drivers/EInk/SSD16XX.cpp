@@ -50,7 +50,9 @@ void SSD16XX::reset()
     if (pin_rst != 0xFF) {
         pinMode(pin_rst, OUTPUT);
         digitalWrite(pin_rst, LOW);
-        delay(50);
+        delay(10);
+        digitalWrite(pin_rst, HIGH);
+        delay(10);
         pinMode(pin_rst, INPUT_PULLUP);
         wait();
     }

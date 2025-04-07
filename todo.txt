@@ -2,7 +2,6 @@ A non-exhaustive task list
 
 Features
 ====================
-[]      adhoc ping
 []      canned message
 []      map scale indicator 
 [wip]   eink drivers for other devices

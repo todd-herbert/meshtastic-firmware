@@ -1,7 +1,7 @@
 #include "DemoDIYModule.h"
 
-#ifdef DIYMODULES
-#ifdef DIYMODULES_DEMO
+#ifdef MESHTASTIC_INCLUDE_DIYMODULES
+#ifdef MESHTASTIC_INCLUDE_DIYMODULE_DEMO
 
 // You need to call new() for this in src/modules/Modules.cpp setupModules()
 DemoDIYModule *demoDIYModule;
@@ -145,5 +145,5 @@ void DemoDIYModule::exampleLoad()
     sendPhoneFeedback(ourReply.c_str());
 }
 
-#endif // DIYMODULES_DEMO
-#endif // DIYMODULES
+#endif // MESHTASTIC_INCLUDE_DIYMODULE_DEMO
+#endif // MESHTASTIC_INCLUDE_DIYMODULES

@@ -12,7 +12,7 @@
 
 #include "configuration.h"
 
-#ifdef DIYMODULES
+#ifdef MESHTASTIC_INCLUDE_DIYMODULES
 
 #include "FSCommon.h"
 #include "MeshModule.h"
@@ -73,7 +73,7 @@ template <typename T> void DIYModule::loadData(T *data)
 
     // Check that the file *does* actually exist
     if (!FSCom.exists(filename.c_str())) {
-        LOG_INFO("'%s' not found. Using default values\n", filename.c_str());
+        LOG_INFO("'%s' not found. Using default values", filename.c_str());
         // Todo: init struct
         return;
     }
@@ -83,7 +83,7 @@ template <typename T> void DIYModule::loadData(T *data)
 
     // If opened, start reading
     if (f) {
-        LOG_INFO("Loading DIY module data '%s'\n", filename.c_str());
+        LOG_INFO("Loading DIY module data '%s'", filename.c_str());
 
         // Read the actual data
         f.readBytes((char *)data, sizeof(T));
@@ -95,22 +95,22 @@ template <typename T> void DIYModule::loadData(T *data)
         // Calculate hash of the loaded data, then compare with the saved hash
         uint32_t calculatedHash = getDataHash(data, sizeof(T));
         if (savedHash != calculatedHash) {
-            LOG_WARN("'%s' is corrupt (hash mismatch). Using default values\n", filename.c_str());
+            LOG_WARN("'%s' is corrupt (hash mismatch). Using default values", filename.c_str());
             *data = T(); // Reinit the data object
         }
 
         f.close();
     } else {
-        LOG_ERROR("Could not open / read %s\n", filename.c_str());
+        LOG_ERROR("Could not open / read %s", filename.c_str());
     }
 #else
-    LOG_ERROR("ERROR: Filesystem not implemented\n");
+    LOG_ERROR("ERROR: Filesystem not implemented");
     state = LoadFileState::NO_FILESYSTEM;
 #endif
     return;
 }
 
-// Save module's custom data (settings?) to flash. Does use protobufs
+// Save module's custom data (settings?) to flash. Doesn't use protobufs
 template <typename T> void DIYModule::saveData(T *data)
 {
     // Build the filepath using the module's name
@@ -133,7 +133,7 @@ template <typename T> void DIYModule::saveData(T *data)
 
     // If it opened, start writing
     if (f) {
-        LOG_INFO("Saving DIY module data '%s'\n", filename.c_str());
+        LOG_INFO("Saving DIY module data '%s", filename.c_str());
 
         // Calculate a hash of the data
         uint32_t hash = getDataHash(data, sizeof(T));
@@ -146,18 +146,18 @@ template <typename T> void DIYModule::saveData(T *data)
 
         // Remove the old file (brief window of risk here()
         if (FSCom.exists(filename.c_str()) && !FSCom.remove(filename.c_str()))
-            LOG_WARN("Can't remove old DIY module file '%s'\n", filename.c_str());
+            LOG_WARN("Can't remove old DIY module file '%s'", filename.c_str());
 
         // Rename the new (temporary) file to take place of the old
         if (!renameFile(filenameTmp.c_str(), filename.c_str()))
-            LOG_ERROR("Error: can't rename new  DIY module file '%s\n", filename.c_str());
+            LOG_ERROR("Error: can't rename new  DIY module file '%s", filename.c_str());
     } else {
-        LOG_ERROR("Can't write DIY module file '%s'\n", filenameTmp.c_str());
+        LOG_ERROR("Can't write DIY module file '%s'", filenameTmp.c_str());
 #ifdef ARCH_NRF52
         static uint8_t failedCounter = 0;
         failedCounter++;
         if (failedCounter >= 2) {
-            LOG_ERROR("Failed to save DIY module file twice. Rebooting...\n");
+            LOG_ERROR("Failed to save DIY module file twice. Rebooting...");
             delay(100);
             NVIC_SystemReset();
         } else
@@ -165,8 +165,8 @@ template <typename T> void DIYModule::saveData(T *data)
 #endif
     }
 #else
-    LOG_ERROR("ERROR: Filesystem not implemented\n");
+    LOG_ERROR("ERROR: Filesystem not implemented");
 #endif
 }
 
-#endif // DIYMODULES
+#endif // MESHTASTIC_INCLUDE_DIYMODULES

@@ -1,6 +1,6 @@
 #include "DIYModule.h"
 
-#ifdef DIYMODULES
+#ifdef MESHTASTIC_INCLUDE_DIYMODULES
 
 #include "MeshService.h"
 #include "Router.h"
@@ -66,9 +66,9 @@ ProcessMessage DIYModule::interceptSentText(meshtastic_MeshPacket &mp, RxSource 
             cm.handleSentText(mp);
 
             // Cancel the message, and lie to the phone that it was sent successfully
-            service.cancelSending(mp.id);
+            service->cancelSending(mp.id);
             meshtastic_QueueStatus qs = router->getQueueStatus();
-            ErrorCode r = service.sendQueueStatusToPhone(qs, meshtastic_Routing_Error_NONE, mp.id);
+            ErrorCode r = service->sendQueueStatusToPhone(qs, meshtastic_Routing_Error_NONE, mp.id);
             if (r != ERRNO_OK)
                 LOG_DEBUG("DIYModule can't send status to phone");
 
@@ -112,7 +112,7 @@ void DIYModule::sendPhoneFeedback(const char *text, const char *channelName)
 
     // Send the new packet off to the phone
     LOG_DEBUG("Sent feedback to phone: \"%s\"\n", text);
-    service.sendToPhone(feedback);
+    service->sendToPhone(feedback);
 }
 
 void DIYModule::spoofACK(meshtastic_MeshPacket &packetToAck)
@@ -135,7 +135,7 @@ void DIYModule::spoofACK(meshtastic_MeshPacket &packetToAck)
 
     // Send the ACK packet to phone
     LOG_DEBUG("Sending ACK for intercepted message\n");
-    service.sendToPhone(p);
+    service->sendToPhone(p);
 }
 
 // Check if a mesh channel exists
@@ -266,4 +266,4 @@ uint32_t DIYModule::getDataHash(void *data, uint32_t size)
     return hash;
 }
 
-#endif // DIYMODULES
+#endif // MESHTASTIC_INCLUDE_DIYMODULES

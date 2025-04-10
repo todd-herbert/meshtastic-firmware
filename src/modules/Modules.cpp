@@ -92,12 +92,11 @@
 #include "modules/DropzoneModule.h"
 #endif
 
-
 /*
  * Include your DIY Modules here
  */
 
-#ifdef DIYMODULES_DEMO
+#ifdef MESHTASTIC_INCLUDE_DIYMODULE_DEMO
 #include "DemoDIYModule.h"
 #endif
 
@@ -257,7 +256,7 @@ void setupModules()
     }
 
 // Create your DIY modules here
-#ifdef DIYMODULES_DEMO
+#ifdef MESHTASTIC_INCLUDE_DIYMODULE_DEMO
     demoDIYModule = new DemoDIYModule();
 #endif
 

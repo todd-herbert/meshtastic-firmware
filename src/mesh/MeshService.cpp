@@ -234,7 +234,7 @@ ErrorCode MeshService::sendQueueStatusToPhone(const meshtastic_QueueStatus &qs, 
 void MeshService::sendToMesh(meshtastic_MeshPacket *p, RxSource src, bool ccToPhone)
 {
 
-#ifdef DIYMODULES
+#ifdef MESHTASTIC_INCLUDE_DIYMODULES
     // We're intercepting manually, because it leaves user free to override handleReceived for their own purpose
     if (DIYModule::interceptSentText(*p, src) == ProcessMessage::STOP) {
         LOG_DEBUG("DIYModule: message was intended for a local module. Cancelling send to mesh\n");

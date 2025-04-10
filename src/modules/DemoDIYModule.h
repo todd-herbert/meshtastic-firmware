@@ -2,8 +2,8 @@
 
 #include "DIYModule.h"
 
-#ifdef DIYMODULES
-#ifdef DIYMODULES_DEMO
+#ifdef MESHTASTIC_INCLUDE_DIYMODULES
+#ifdef MESHTASTIC_INCLUDE_DIYMODULE_DEMO
 
 /*
  * DIY Modules - Demo
@@ -25,9 +25,9 @@
  *     - Create an instance of your module in setupModules()
  *
  *   - In variants/<your board>/variant.h
- *      - #define DIYMODULES
- *      - #define DIYMODULES_DEMO (to build this demo)
- *        (or add to your platformio.ini file, if you don't mind VSCode greying-out your work)
+ *      - #define MESHTASTIC_INCLUDE_DIYMODULES
+ *      - #define MESHTASTIC_INCLUDE_DIYMODULE_DEMO (to build this demo)
+ *        (or add to your platformio.ini file's build args, if you don't mind VSCode greying-out your work)
  */
 
 class DemoDIYModule : public DIYModule
@@ -47,5 +47,5 @@ class DemoDIYModule : public DIYModule
 // You need to call new() for this in src/modules/Modules.cpp setupModules()
 extern DemoDIYModule *demoDIYModule;
 
-#endif // DIYMODULES_DEMO
-#endif // DIYMODULES
+#endif // MESHTASTIC_INCLUDE_DIYMODULE_DEMO
+#endif // MESHTASTIC_INCLUDE_DIYMODULES

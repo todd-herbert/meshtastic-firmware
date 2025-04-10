@@ -48,11 +48,11 @@
 #undef GPS_RX_PIN
 #undef GPS_TX_PIN
 
-// #define HAS_SDCARD 1 // causes hang if defined
+#define SD_SPI_FREQUENCY 25000000
 #define SDCARD_CS 43
 
-#define LED_PIN 13 // the red part of the RGB LED
-#define LED_INVERTED 1
+#define LED_PIN 13     // the red part of the RGB LED
+#define LED_STATE_ON 0 // State when LED is lit
 
 #define BUTTON_PIN 21      // Button 3 - square - top button in landscape mode
 #define BUTTON_NEED_PULLUP // we do need a helping hand up

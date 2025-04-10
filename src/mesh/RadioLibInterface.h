@@ -5,6 +5,7 @@
 #include "concurrency/NotifiedWorkerThread.h"
 
 #include <RadioLib.h>
+#include <sys/types.h>
 
 // ESP32 has special rules about ISR code
 #ifdef ARDUINO_ARCH_ESP32
@@ -21,18 +22,11 @@
 class LockingArduinoHal : public ArduinoHal
 {
   public:
-    LockingArduinoHal(SPIClass &spi, SPISettings spiSettings, RADIOLIB_PIN_TYPE _busy = RADIOLIB_NC)
-        : ArduinoHal(spi, spiSettings)
-    {
-#if ARCH_PORTDUINO
-        busy = _busy;
-#endif
-    };
+    LockingArduinoHal(SPIClass &spi, SPISettings spiSettings) : ArduinoHal(spi, spiSettings){};
 
     void spiBeginTransaction() override;
     void spiEndTransaction() override;
 #if ARCH_PORTDUINO
-    RADIOLIB_PIN_TYPE busy;
     void spiTransfer(uint8_t *out, size_t len, uint8_t *in) override;
 
 #endif
@@ -60,11 +54,6 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      * Raw ISR handler that just calls our polymorphic method
      */
     static void isrTxLevel0(), isrLevel0Common(PendingISR code);
-
-    /**
-     * Debugging counts
-     */
-    uint32_t rxBad = 0, rxGood = 0, txGood = 0;
 
     MeshPacketQueue txQueue = MeshPacketQueue(MAX_TX_QUEUE);
 
@@ -109,6 +98,11 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      */
     virtual void enableInterrupt(void (*)()) = 0;
 
+    /**
+     * Debugging counts
+     */
+    uint32_t rxBad = 0, rxGood = 0, txGood = 0, txRelay = 0;
+
   public:
     RadioLibInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst,
                       RADIOLIB_PIN_TYPE busy, PhysicalLayer *iface = NULL);
@@ -126,8 +120,9 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      * Start waiting to receive a message
      *
      * External functions can call this method to wake the device from sleep.
+     * Subclasses must override and call this base method
      */
-    virtual void startReceive() = 0;
+    virtual void startReceive();
 
     /** can we detect a LoRa preamble on the current channel? */
     virtual bool isChannelActive() = 0;
@@ -140,15 +135,24 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     /** Attempt to cancel a previously sent packet.  Returns true if a packet was found we could cancel */
     virtual bool cancelSending(NodeNum from, PacketId id) override;
 
+    /** Attempt to find a packet in the TxQueue. Returns true if the packet was found. */
+    virtual bool findInTxQueue(NodeNum from, PacketId id) override;
+
   private:
     /** if we have something waiting to send, start a short (random) timer so we can come check for collision before actually
      * doing the transmit */
     void setTransmitDelay();
 
-    /** random timer with certain min. and max. settings */
+    /**
+     * random timer with certain min. and max. settings
+     * @return Timestamp after which the packet may be sent
+     */
     void startTransmitTimer(bool withDelay = true);
 
-    /** timer scaled to SNR of to be flooded packet */
+    /**
+     * timer scaled to SNR of to be flooded packet
+     * @return Timestamp after which the packet may be sent
+     */
     void startTransmitTimerSNR(float snr);
 
     void handleTransmitInterrupt();
@@ -160,14 +164,20 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 
     /** start an immediate transmit
      *  This method is virtual so subclasses can hook as needed, subclasses should not call directly
+     *  @return true if packet was sent
      */
-    virtual void startSend(meshtastic_MeshPacket *txp);
+    virtual bool startSend(meshtastic_MeshPacket *txp);
 
     meshtastic_QueueStatus getQueueStatus();
 
   protected:
-    /** Do any hardware setup needed on entry into send configuration for the radio.  Subclasses can customize */
-    virtual void configHardwareForSend() {}
+    uint32_t activeReceiveStart = 0;
+
+    bool receiveDetected(uint16_t irq, ulong syncWordHeaderValidFlag, ulong preambleDetectedFlag);
+
+    /** Do any hardware setup needed on entry into send configuration for the radio.
+     * Subclasses can customize, but must also call this base method */
+    virtual void configHardwareForSend();
 
     /** Could we send right now (i.e. either not actively receiving or transmitting)? */
     virtual bool canSendImmediately();
@@ -186,5 +196,15 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      */
     virtual void addReceiveMetadata(meshtastic_MeshPacket *mp) = 0;
 
-    virtual void setStandby() = 0;
+    /**
+     * Subclasses must override, implement and then call into this base class implementation
+     */
+    virtual void setStandby();
+
+    const char *radioLibErr = "RadioLib err=";
+
+    /**
+     * If the packet is not already in the late rebroadcast window, move it there
+     */
+    void clampToLateRebroadcastWindow(NodeNum from, PacketId id);
 };

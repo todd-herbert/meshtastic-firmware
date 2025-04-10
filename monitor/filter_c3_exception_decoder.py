@@ -1,3 +1,6 @@
+# trunk-ignore-all(bandit/B404): subprocess is used to call addr2line
+# trunk-ignore-all(bandit/B603): subprocess is used to call addr2line
+
 # Copyright (c) 2014-present PlatformIO <contact@platformio.org>
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,10 +21,7 @@ import subprocess
 import sys
 
 from platformio.project.exception import PlatformioException
-from platformio.public import (
-    DeviceMonitorFilterBase,
-    load_build_metadata,
-)
+from platformio.public import DeviceMonitorFilterBase, load_build_metadata
 
 # By design, __init__ is called inside miniterm and we can't pass context to it.
 # pylint: disable=attribute-defined-outside-init
@@ -32,7 +32,7 @@ IS_WINDOWS = sys.platform.startswith("win")
 class Esp32C3ExceptionDecoder(DeviceMonitorFilterBase):
     NAME = "esp32_c3_exception_decoder"
 
-    PCADDR_PATTERN = re.compile(r'0x4[0-9a-f]{7}', re.IGNORECASE)
+    PCADDR_PATTERN = re.compile(r"0x4[0-9a-f]{7}", re.IGNORECASE)
 
     def __call__(self):
         self.buffer = ""
@@ -75,14 +75,14 @@ See https://docs.platformio.org/page/projectconf/build_configurations.html
                         % self.__class__.__name__
                     )
                     return False
-                
+
             if not os.path.isfile(self.addr2line_path):
                 sys.stderr.write(
                     "%s: disabling, addr2line at %s does not exist\n"
                     % (self.__class__.__name__, self.addr2line_path)
                 )
                 return False
-                
+
             return True
         except PlatformioException as e:
             sys.stderr.write(
@@ -117,7 +117,7 @@ See https://docs.platformio.org/page/projectconf/build_configurations.html
 
                 trace = self.get_backtrace(m)
                 if len(trace) != "":
-                    text = text[: last] + trace + text[last :]
+                    text = text[:last] + trace + text[last:]
                     last += len(trace)
 
         return text
@@ -125,14 +125,10 @@ See https://docs.platformio.org/page/projectconf/build_configurations.html
     def get_backtrace(self, match):
         trace = "\n"
         enc = "mbcs" if IS_WINDOWS else "utf-8"
-        args = [self.addr2line_path, u"-fipC", u"-e", self.firmware_path]
+        args = [self.addr2line_path, "-fipC", "-e", self.firmware_path]
         try:
             addr = match.group()
-            output = (
-                subprocess.check_output(args + [addr])
-                .decode(enc)
-                .strip()
-            )
+            output = subprocess.check_output(args + [addr]).decode(enc).strip()
             output = output.replace(
                 "\n", "\n     "
             )  # newlines happen with inlined methods

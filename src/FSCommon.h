@@ -1,6 +1,7 @@
 #pragma once
 
 #include "configuration.h"
+#include <vector>
 
 // Cross platform filesystem API
 
@@ -14,10 +15,11 @@
 #endif
 
 #if defined(ARCH_STM32WL)
-#include "platform/stm32wl/InternalFileSystem.h" // STM32WL version
+// STM32WL
+#include "LittleFS.h"
 #define FSCom InternalFS
 #define FSBegin() FSCom.begin()
-using namespace LittleFS_Namespace;
+using namespace STM32_LittleFS_Namespace;
 #endif
 
 #if defined(ARCH_RP2040)
@@ -47,8 +49,10 @@ using namespace Adafruit_LittleFS_Namespace;
 #endif
 
 void fsInit();
+void fsListFiles();
 bool copyFile(const char *from, const char *to);
 bool renameFile(const char *pathFrom, const char *pathTo);
-void listDir(const char *dirname, uint8_t levels, bool del);
+std::vector<meshtastic_FileInfo> getFiles(const char *dirname, uint8_t levels);
+void listDir(const char *dirname, uint8_t levels, bool del = false);
 void rmDir(const char *dirname);
 void setupSDCard();

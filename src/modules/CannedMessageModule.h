@@ -56,6 +56,7 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     const char *getMessageByIndex(int index);
     const char *getNodeName(NodeNum node);
     bool shouldDraw();
+    bool hasMessages();
     // void eventUp();
     // void eventDown();
     // void eventSelect();
@@ -66,6 +67,10 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     void showTemporaryMessage(const String &message);
 
     String drawWithCursor(String text, int cursor);
+
+#ifdef RAK14014
+    cannedMessageModuleRunState getRunState() const { return runState; }
+#endif
 
     /*
       -Override the wantPacket method. We need the Routing Messages to look for ACKs.
@@ -81,9 +86,8 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
         }
 
         switch (p->decoded.portnum) {
-        case meshtastic_PortNum_TEXT_MESSAGE_APP:
         case meshtastic_PortNum_ROUTING_APP:
-            return true;
+            return waitingForAck;
         default:
             return false;
         }
@@ -98,7 +102,7 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     int getNextIndex();
     int getPrevIndex();
 
-#ifdef T_WATCH_S3
+#if defined(USE_VIRTUAL_KEYBOARD)
     void drawKeyboard(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
     String keyForCoordinates(uint x, uint y);
     bool shift = false;
@@ -113,7 +117,10 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     int handleInputEvent(const InputEvent *event);
     virtual bool wantUIFrame() override { return this->shouldDraw(); }
     virtual Observable<const UIFrameEvent *> *getUIFrameObservable() override { return this; }
+    virtual bool interceptingKeyboardInput() override;
+#if !HAS_TFT
     virtual void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) override;
+#endif
     virtual AdminMessageHandleResult handleAdminMessageForModule(const meshtastic_MeshPacket &mp,
                                                                  meshtastic_AdminMessage *request,
                                                                  meshtastic_AdminMessage *response) override;
@@ -140,7 +147,8 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     uint8_t numChannels = 0;
     ChannelIndex indexChannels[MAX_NUM_CHANNELS] = {0};
     NodeNum incoming = NODENUM_BROADCAST;
-    bool ack = false; // True means ACK, false means NAK (error_reason != NONE)
+    bool ack = false;           // True means ACK, false means NAK (error_reason != NONE)
+    bool waitingForAck = false; // Are currently interested in routing packets?
     float lastRxSnr = 0;
     int32_t lastRxRssi = 0;
 
@@ -150,7 +158,7 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     unsigned long lastTouchMillis = 0;
     String temporaryMessage;
 
-#ifdef T_WATCH_S3
+#if defined(USE_VIRTUAL_KEYBOARD)
     Letter keyboard[2][4][10] = {{{{"Q", 20, 0, 0, 0, 0},
                                    {"W", 22, 0, 0, 0, 0},
                                    {"E", 17, 0, 0, 0, 0},

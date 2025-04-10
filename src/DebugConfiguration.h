@@ -1,9 +1,10 @@
-#ifndef SYSLOG_H
-#define SYSLOG_H
+#pragma once
+
+#include "configuration.h"
 
 // DEBUG LED
-#ifndef LED_INVERTED
-#define LED_INVERTED 0 // define as 1 if LED is active low (on)
+#ifndef LED_STATE_ON
+#define LED_STATE_ON 1
 #endif
 
 // -----------------------------------------------------------------------------
@@ -24,6 +25,14 @@
 #define MESHTASTIC_LOG_LEVEL_TRACE "TRACE"
 
 #include "SerialConsole.h"
+
+// If defined we will include support for ARM ICE "semihosting" for a virtual
+// console over the JTAG port (to replace the normal serial port)
+// Note: Normally this flag is passed into the gcc commandline by platformio.ini.
+// for an example see env:rak4631_dap.
+// #ifndef USE_SEMIHOSTING
+// #define USE_SEMIHOSTING
+// #endif
 
 #define DEBUG_PORT (*console) // Serial debug port
 
@@ -52,6 +61,9 @@
 #define LOG_TRACE(...)
 #endif
 #endif
+
+/// A C wrapper for LOG_DEBUG that can be used from arduino C libs that don't know about C++ or meshtastic
+extern "C" void logLegacy(const char *level, const char *fmt, ...);
 
 #define SYSLOG_NILVALUE "-"
 
@@ -109,15 +121,20 @@
 // Default Bluetooth PIN
 #define defaultBLEPin 123456
 
-#if HAS_ETHERNET
+#if HAS_ETHERNET && !defined(USE_WS5500)
 #include <RAK13800_W5100S.h>
+#endif // HAS_ETHERNET
+
+#if HAS_ETHERNET && defined(USE_WS5500)
+#include <ETHClass2.h>
+#define ETH ETH2
 #endif // HAS_ETHERNET
 
 #if HAS_WIFI
 #include <WiFi.h>
 #endif // HAS_WIFI
 
-#if HAS_WIFI || HAS_ETHERNET
+#if HAS_NETWORKING
 
 class Syslog
 {
@@ -152,6 +169,4 @@ class Syslog
     bool vlogf(uint16_t pri, const char *appName, const char *fmt, va_list args) __attribute__((format(printf, 3, 0)));
 };
 
-#endif // HAS_ETHERNET || HAS_WIFI
-
-#endif // SYSLOG_H
+#endif // HAS_NETWORKING

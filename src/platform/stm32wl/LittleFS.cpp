@@ -1,258 +1,198 @@
-#include <Arduino.h>
-#include <string.h>
+/*
+ * The MIT License (MIT)
+ *
+ * Copyright (c) 2019 hathach for Adafruit Industries
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
+ */
 
 #include "LittleFS.h"
+#include "stm32wlxx_hal_flash.h"
 
-using namespace LittleFS_Namespace;
+/**********************************************************************************************************************
+ * Macro definitions
+ **********************************************************************************************************************/
+/** This macro is used to suppress compiler messages about a parameter not being used in a function. */
+#define LFS_UNUSED(p) (void)((p))
 
-//--------------------------------------------------------------------+
-// Implementation
-//--------------------------------------------------------------------+
+#define STM32WL_PAGE_SIZE (FLASH_PAGE_SIZE)
+#define STM32WL_PAGE_COUNT (FLASH_PAGE_NB)
+#define STM32WL_FLASH_BASE (FLASH_BASE)
 
-LittleFS::LittleFS(void) : LittleFS(NULL) {}
+/*
+ * FLASH_SIZE from stm32wle5xx.h will read the actual FLASH size from the chip.
+ * FLASH_END_ADDR is calculated from FLASH_SIZE.
+ * Use the last 28 KiB of the FLASH
+ */
+#define LFS_FLASH_TOTAL_SIZE (14 * 2048) /* needs to be a multiple of LFS_BLOCK_SIZE */
+#define LFS_BLOCK_SIZE (2048)
+#define LFS_FLASH_ADDR_END (FLASH_END_ADDR)
+#define LFS_FLASH_ADDR_BASE (LFS_FLASH_ADDR_END - LFS_FLASH_TOTAL_SIZE + 1)
 
-LittleFS::LittleFS(struct lfs_config *cfg)
-{
-    memset(&_lfs, 0, sizeof(_lfs));
-    _lfs_cfg = cfg;
-    _mounted = false;
-    _mutex = xSemaphoreCreateMutexStatic(&this->_MutexStorageSpace);
-}
-
-LittleFS::~LittleFS() {}
-
-// Initialize and mount the file system
-// Return true if mounted successfully else probably corrupted.
-// User should format the disk and try again
-bool LittleFS::begin(struct lfs_config *cfg)
-{
-    _lockFS();
-
-    bool ret;
-    // not a loop, just an quick way to short-circuit on error
-    do {
-        if (_mounted) {
-            ret = true;
-            break;
-        }
-        if (cfg) {
-            _lfs_cfg = cfg;
-        }
-        if (nullptr == _lfs_cfg) {
-            ret = false;
-            break;
-        }
-        // actually attempt to mount, and log error if one occurs
-        int err = lfs_mount(&_lfs, _lfs_cfg);
-        PRINT_LFS_ERR(err);
-        _mounted = (err == LFS_ERR_OK);
-        ret = _mounted;
-    } while (0);
-
-    _unlockFS();
-    return ret;
-}
-
-// Tear down and unmount file system
-void LittleFS::end(void)
-{
-    _lockFS();
-
-    if (_mounted) {
-        _mounted = false;
-        int err = lfs_unmount(&_lfs);
-        PRINT_LFS_ERR(err);
-        (void)err;
-    }
-
-    _unlockFS();
-}
-
-bool LittleFS::format(void)
-{
-    _lockFS();
-
-    int err = LFS_ERR_OK;
-    bool attemptMount = _mounted;
-    // not a loop, just an quick way to short-circuit on error
-    do {
-        // if already mounted: umount first -> format -> remount
-        if (_mounted) {
-            _mounted = false;
-            err = lfs_unmount(&_lfs);
-            if (LFS_ERR_OK != err) {
-                PRINT_LFS_ERR(err);
-                break;
-            }
-        }
-        err = lfs_format(&_lfs, _lfs_cfg);
-        if (LFS_ERR_OK != err) {
-            PRINT_LFS_ERR(err);
-            break;
-        }
-
-        if (attemptMount) {
-            err = lfs_mount(&_lfs, _lfs_cfg);
-            if (LFS_ERR_OK != err) {
-                PRINT_LFS_ERR(err);
-                break;
-            }
-            _mounted = true;
-        }
-        // success!
-    } while (0);
-
-    _unlockFS();
-    return LFS_ERR_OK == err;
-}
-
-// Open a file or folder
-LittleFS_Namespace::File LittleFS::open(char const *filepath, uint8_t mode)
-{
-    // No lock is required here ... the File() object will synchronize with the mutex provided
-    return LittleFS_Namespace::File(filepath, mode, *this);
-}
-
-// Check if file or folder exists
-bool LittleFS::exists(char const *filepath)
-{
-    struct lfs_info info;
-    _lockFS();
-
-    bool ret = (0 == lfs_stat(&_lfs, filepath, &info));
-
-    _unlockFS();
-    return ret;
-}
-
-// Create a directory, create intermediate parent if needed
-bool LittleFS::mkdir(char const *filepath)
-{
-    bool ret = true;
-    const char *slash = filepath;
-    if (slash[0] == '/')
-        slash++; // skip root '/'
-
-    _lockFS();
-
-    // make intermediate parent directory(ies)
-    while (NULL != (slash = strchr(slash, '/'))) {
-        char parent[slash - filepath + 1] = {0};
-        memcpy(parent, filepath, slash - filepath);
-
-        int rc = lfs_mkdir(&_lfs, parent);
-        if (rc != LFS_ERR_OK && rc != LFS_ERR_EXIST) {
-            PRINT_LFS_ERR(rc);
-            ret = false;
-            break;
-        }
-        slash++;
-    }
-    // make the final requested directory
-    if (ret) {
-        int rc = lfs_mkdir(&_lfs, filepath);
-        if (rc != LFS_ERR_OK && rc != LFS_ERR_EXIST) {
-            PRINT_LFS_ERR(rc);
-            ret = false;
-        }
-    }
-
-    _unlockFS();
-    return ret;
-}
-
-// Remove a file
-bool LittleFS::remove(char const *filepath)
-{
-    _lockFS();
-
-    int err = lfs_remove(&_lfs, filepath);
-    PRINT_LFS_ERR(err);
-
-    _unlockFS();
-    return LFS_ERR_OK == err;
-}
-
-// Rename a file
-bool LittleFS::rename(char const *oldfilepath, char const *newfilepath)
-{
-    _lockFS();
-
-    int err = lfs_rename(&_lfs, oldfilepath, newfilepath);
-    PRINT_LFS_ERR(err);
-
-    _unlockFS();
-    return LFS_ERR_OK == err;
-}
-
-// Remove a folder
-bool LittleFS::rmdir(char const *filepath)
-{
-    _lockFS();
-
-    int err = lfs_remove(&_lfs, filepath);
-    PRINT_LFS_ERR(err);
-
-    _unlockFS();
-    return LFS_ERR_OK == err;
-}
-
-// Remove a folder recursively
-bool LittleFS::rmdir_r(char const *filepath)
-{
-    /* adafruit: lfs is modified to remove non-empty folder,
-     According to below issue, comment these 2 line won't corrupt filesystem
-     at least when using LFS v1.  If moving to LFS v2, see tracked issue
-     to see if issues (such as the orphans in threaded linked list) are resolved.
-     https://github.com/ARMmbed/littlefs/issues/43
-     */
-    _lockFS();
-
-    int err = lfs_remove(&_lfs, filepath);
-    PRINT_LFS_ERR(err);
-
-    _unlockFS();
-    return LFS_ERR_OK == err;
-}
-
-//------------- Debug -------------//
-#if CFG_DEBUG
-
-const char *dbg_strerr_lfs(int32_t err)
-{
-    switch (err) {
-    case LFS_ERR_OK:
-        return "LFS_ERR_OK";
-    case LFS_ERR_IO:
-        return "LFS_ERR_IO";
-    case LFS_ERR_CORRUPT:
-        return "LFS_ERR_CORRUPT";
-    case LFS_ERR_NOENT:
-        return "LFS_ERR_NOENT";
-    case LFS_ERR_EXIST:
-        return "LFS_ERR_EXIST";
-    case LFS_ERR_NOTDIR:
-        return "LFS_ERR_NOTDIR";
-    case LFS_ERR_ISDIR:
-        return "LFS_ERR_ISDIR";
-    case LFS_ERR_NOTEMPTY:
-        return "LFS_ERR_NOTEMPTY";
-    case LFS_ERR_BADF:
-        return "LFS_ERR_BADF";
-    case LFS_ERR_INVAL:
-        return "LFS_ERR_INVAL";
-    case LFS_ERR_NOSPC:
-        return "LFS_ERR_NOSPC";
-    case LFS_ERR_NOMEM:
-        return "LFS_ERR_NOMEM";
-
-    default:
-        static char errcode[10];
-        sprintf(errcode, "%ld", err);
-        return errcode;
-    }
-
-    return NULL;
-}
-
+#if !CFG_DEBUG
+#define _LFS_DBG(fmt, ...)
+#else
+#define _LFS_DBG(fmt, ...) printf("%s:%d (%s): " fmt "\n", __FILE__, __LINE__, __func__, __VA_ARGS__)
 #endif
+
+//--------------------------------------------------------------------+
+// LFS Disk IO
+//--------------------------------------------------------------------+
+
+static int _internal_flash_read(const struct lfs_config *c, lfs_block_t block, lfs_off_t off, void *buffer, lfs_size_t size)
+{
+    LFS_UNUSED(c);
+
+    if (!buffer || !size) {
+        _LFS_DBG("%s Invalid parameter!\r\n", __func__);
+        return LFS_ERR_INVAL;
+    }
+
+    lfs_block_t address = LFS_FLASH_ADDR_BASE + (block * STM32WL_PAGE_SIZE + off);
+
+    memcpy(buffer, (void *)address, size);
+
+    return LFS_ERR_OK;
+}
+
+// Program a region in a block. The block must have previously
+// been erased. Negative error codes are propogated to the user.
+// May return LFS_ERR_CORRUPT if the block should be considered bad.
+static int _internal_flash_prog(const struct lfs_config *c, lfs_block_t block, lfs_off_t off, const void *buffer, lfs_size_t size)
+{
+    lfs_block_t address = LFS_FLASH_ADDR_BASE + (block * STM32WL_PAGE_SIZE + off);
+    HAL_StatusTypeDef hal_rc = HAL_OK;
+    uint32_t dw_count = size / 8;
+    uint64_t *bufp = (uint64_t *)buffer;
+
+    LFS_UNUSED(c);
+
+    _LFS_DBG("Programming %d bytes/%d doublewords at address 0x%08x/block %d, offset %d.", size, dw_count, address, block, off);
+    if (HAL_FLASH_Unlock() != HAL_OK) {
+        return LFS_ERR_IO;
+    }
+    for (uint32_t i = 0; i < dw_count; i++) {
+        if ((address < LFS_FLASH_ADDR_BASE) || (address > LFS_FLASH_ADDR_END)) {
+            _LFS_DBG("Wanted to program out of bound of FLASH: 0x%08x.\n", address);
+            HAL_FLASH_Lock();
+            return LFS_ERR_INVAL;
+        }
+        hal_rc = HAL_FLASH_Program(FLASH_TYPEPROGRAM_DOUBLEWORD, address, *bufp);
+        if (hal_rc != HAL_OK) {
+            /* Error occurred while writing data in Flash memory.
+             * User can add here some code to deal with this error.
+             */
+            _LFS_DBG("Program error at (0x%08x), 0x%X, error: 0x%08x\n", address, hal_rc, HAL_FLASH_GetError());
+        }
+        address += 8;
+        bufp += 1;
+    }
+    if (HAL_FLASH_Lock() != HAL_OK) {
+        return LFS_ERR_IO;
+    }
+
+    return hal_rc == HAL_OK ? LFS_ERR_OK : LFS_ERR_IO; // If HAL_OK, return LFS_ERR_OK, else return LFS_ERR_IO
+}
+
+// Erase a block. A block must be erased before being programmed.
+// The state of an erased block is undefined. Negative error codes
+// are propogated to the user.
+// May return LFS_ERR_CORRUPT if the block should be considered bad.
+static int _internal_flash_erase(const struct lfs_config *c, lfs_block_t block)
+{
+    lfs_block_t address = LFS_FLASH_ADDR_BASE + (block * STM32WL_PAGE_SIZE);
+    HAL_StatusTypeDef hal_rc;
+    FLASH_EraseInitTypeDef EraseInitStruct = {.TypeErase = FLASH_TYPEERASE_PAGES, .Page = 0, .NbPages = 1};
+    uint32_t PAGEError = 0;
+
+    LFS_UNUSED(c);
+
+    if ((address < LFS_FLASH_ADDR_BASE) || (address > LFS_FLASH_ADDR_END)) {
+        _LFS_DBG("Wanted to erase out of bound of FLASH: 0x%08x.\n", address);
+        return LFS_ERR_INVAL;
+    }
+    /* calculate the absolute page, i.e. what the ST wants */
+    EraseInitStruct.Page = (address - STM32WL_FLASH_BASE) / STM32WL_PAGE_SIZE;
+    _LFS_DBG("Erasing block %d at 0x%08x... ", block, address);
+    HAL_FLASH_Unlock();
+    hal_rc = HAL_FLASHEx_Erase(&EraseInitStruct, &PAGEError);
+    HAL_FLASH_Lock();
+
+    return hal_rc == HAL_OK ? LFS_ERR_OK : LFS_ERR_IO; // If HAL_OK, return LFS_ERR_OK, else return LFS_ERR_IO
+}
+
+// Sync the state of the underlying block device. Negative error codes
+// are propogated to the user.
+static int _internal_flash_sync(const struct lfs_config *c)
+{
+    LFS_UNUSED(c);
+    // write function performs no caching.  No need for sync.
+
+    return LFS_ERR_OK;
+}
+
+static struct lfs_config _InternalFSConfig = {.context = NULL,
+
+                                              .read = _internal_flash_read,
+                                              .prog = _internal_flash_prog,
+                                              .erase = _internal_flash_erase,
+                                              .sync = _internal_flash_sync,
+
+                                              .read_size = LFS_BLOCK_SIZE,
+                                              .prog_size = LFS_BLOCK_SIZE,
+                                              .block_size = LFS_BLOCK_SIZE,
+                                              .block_count = LFS_FLASH_TOTAL_SIZE / LFS_BLOCK_SIZE,
+                                              .lookahead = 128,
+
+                                              .read_buffer = NULL,
+                                              .prog_buffer = NULL,
+                                              .lookahead_buffer = NULL,
+                                              .file_buffer = NULL};
+
+LittleFS InternalFS;
+
+//--------------------------------------------------------------------+
+//
+//--------------------------------------------------------------------+
+
+LittleFS::LittleFS(void) : STM32_LittleFS(&_InternalFSConfig) {}
+
+bool LittleFS::begin(void)
+{
+    if (FLASH_BASE >= LFS_FLASH_ADDR_BASE) {
+        /* There is not enough space on this device for a filesystem. */
+        return false;
+    }
+    // failed to mount, erase all pages then format and mount again
+    if (!STM32_LittleFS::begin()) {
+        // Erase all pages of internal flash region for Filesystem.
+        for (uint32_t addr = LFS_FLASH_ADDR_BASE; addr < (LFS_FLASH_ADDR_END + 1); addr += STM32WL_PAGE_SIZE) {
+            _internal_flash_erase(&_InternalFSConfig, (addr - LFS_FLASH_ADDR_BASE) / STM32WL_PAGE_SIZE);
+        }
+
+        // lfs format
+        this->format();
+
+        // mount again if still failed, give up
+        if (!STM32_LittleFS::begin())
+            return false;
+    }
+
+    return true;
+}

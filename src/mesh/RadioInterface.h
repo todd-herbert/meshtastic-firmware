@@ -5,10 +5,13 @@
 #include "Observer.h"
 #include "PointerQueue.h"
 #include "airtime.h"
+#include "error.h"
 
 #define MAX_TX_QUEUE 16 // max number of packets which can be waiting for transmission
 
-#define MAX_RHPACKETLEN 256
+#define MAX_LORA_PAYLOAD_LEN 255 // max length of 255 per Semtech's datasheets on SX12xx
+#define MESHTASTIC_HEADER_LENGTH 16
+#define MESHTASTIC_PKC_OVERHEAD 12
 
 #define PACKET_FLAGS_HOP_LIMIT_MASK 0x07
 #define PACKET_FLAGS_WANT_ACK_MASK 0x08
@@ -35,12 +38,26 @@ typedef struct {
     /** The channel hash - used as a hint for the decoder to limit which channels we consider */
     uint8_t channel;
 
-    // ***For future use*** Last byte of the NodeNum of the next-hop for this packet
+    // Last byte of the NodeNum of the next-hop for this packet
     uint8_t next_hop;
 
-    // ***For future use*** Last byte of the NodeNum of the node that will relay/relayed this packet
+    // Last byte of the NodeNum of the node that will relay/relayed this packet
     uint8_t relay_node;
 } PacketHeader;
+
+/**
+ * This structure represent the structured buffer : a PacketHeader then the payload. The whole is
+ * MAX_LORA_PAYLOAD_LEN + 1 length
+ * It makes the use of its data easier, and avoids manipulating pointers (and potential non aligned accesses)
+ */
+typedef struct {
+    /** The header, as defined just before */
+    PacketHeader header;
+
+    /** The payload, of maximum length minus the header, aligned just to be sure */
+    uint8_t payload[MAX_LORA_PAYLOAD_LEN + 1 - sizeof(PacketHeader)] __attribute__((__aligned__));
+
+} RadioBuffer;
 
 /**
  * Basic operations all radio chipsets must implement.
@@ -66,28 +83,27 @@ class RadioInterface
     float bw = 125;
     uint8_t sf = 9;
     uint8_t cr = 5;
-    /** Slottime is the minimum time to wait, consisting of:
-      - CAD duration (maximum of SX126x and SX127x);
-      - roundtrip air propagation time (assuming max. 30km between nodes);
-      - Tx/Rx turnaround time (maximum of SX126x and SX127x);
-      - MAC processing time (measured on T-beam) */
-    uint32_t slotTimeMsec = 8.5 * pow(2, sf) / bw + 0.2 + 0.4 + 7;
+
+    const uint8_t NUM_SYM_CAD = 2;       // Number of symbols used for CAD, 2 is the default since RadioLib 6.3.0 as per AN1200.48
+    const uint8_t NUM_SYM_CAD_24GHZ = 4; // Number of symbols used for CAD in 2.4 GHz, 4 is recommended in AN1200.22 of SX1280
+    uint32_t slotTimeMsec = computeSlotTimeMsec();
     uint16_t preambleLength = 16;      // 8 is default, but we use longer to increase the amount of sleep time when receiving
     uint32_t preambleTimeMsec = 165;   // calculated on startup, this is the default for LongFast
     uint32_t maxPacketTimeMsec = 3246; // calculated on startup, this is the default for LongFast
     const uint32_t PROCESSING_TIME_MSEC =
         4500;                // time to construct, process and construct a packet again (empirically determined)
-    const uint8_t CWmin = 2; // minimum CWsize
+    const uint8_t CWmin = 3; // minimum CWsize
     const uint8_t CWmax = 8; // maximum CWsize
 
     meshtastic_MeshPacket *sendingPacket = NULL; // The packet we are currently sending
     uint32_t lastTxStart = 0L;
 
+    uint32_t computeSlotTimeMsec();
+
     /**
      * A temporary buffer used for sending/receiving packets, sized to hold the biggest buffer we might need
      * */
-    uint8_t radiobuf[MAX_RHPACKETLEN];
-
+    RadioBuffer radioBuffer __attribute__((__aligned__));
     /**
      * Enqueue a received packet for the registered receiver
      */
@@ -137,6 +153,9 @@ class RadioInterface
     /** Attempt to cancel a previously sent packet.  Returns true if a packet was found we could cancel */
     virtual bool cancelSending(NodeNum from, PacketId id) { return false; }
 
+    /** Attempt to find a packet in the TxQueue. Returns true if the packet was found. */
+    virtual bool findInTxQueue(NodeNum from, PacketId id) { return false; }
+
     // methods from radiohead
 
     /// Initialise the Driver transport hardware and software.
@@ -155,8 +174,17 @@ class RadioInterface
     /** The delay to use when we want to send something */
     uint32_t getTxDelayMsec();
 
+    /** The CW to use when calculating SNR_based delays */
+    uint8_t getCWsize(float snr);
+
+    /** The worst-case SNR_based packet delay */
+    uint32_t getTxDelayMsecWeightedWorst(float snr);
+
     /** The delay to use when we want to flood a message. Use a weighted scale based on SNR */
     uint32_t getTxDelayMsecWeighted(float snr);
+
+    /** If the packet is not already in the late rebroadcast window, move it there */
+    virtual void clampToLateRebroadcastWindow(NodeNum from, PacketId id) { return; }
 
     /**
      * Calculate airtime per

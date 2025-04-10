@@ -2,11 +2,13 @@
 name: Semgrep Differential Scan
 on: pull_request
 
+permissions: read-all
+
 jobs:
   semgrep-diff:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     container:
-      image: returntocorp/semgrep
+      image: semgrep/semgrep
 
     steps:
       # step 1

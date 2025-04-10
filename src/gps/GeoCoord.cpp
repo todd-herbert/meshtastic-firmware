@@ -493,7 +493,7 @@ std::shared_ptr<GeoCoord> GeoCoord::pointAtDistance(double bearing, double range
  * The bearing in string format
  * @return Bearing in degrees
  */
-uint GeoCoord::bearingToDegrees(const char *bearing)
+unsigned int GeoCoord::bearingToDegrees(const char *bearing)
 {
     if (strcmp(bearing, "N") == 0)
         return 0;
@@ -537,7 +537,7 @@ uint GeoCoord::bearingToDegrees(const char *bearing)
  * The bearing in degrees
  * @return Bearing in string format
  */
-const char *GeoCoord::degreesToBearing(uint degrees)
+const char *GeoCoord::degreesToBearing(unsigned int degrees)
 {
     if (degrees >= 348 || degrees < 11)
         return "N";
@@ -573,4 +573,24 @@ const char *GeoCoord::degreesToBearing(uint degrees)
         return "NNW";
     else
         return "N";
+}
+
+double GeoCoord::pow_neg(double base, double exponent)
+{
+    if (exponent == 0) {
+        return 1;
+    } else if (exponent > 0) {
+        return pow(base, exponent);
+    }
+    return 1 / pow(base, -exponent);
+}
+
+double GeoCoord::toRadians(double deg)
+{
+    return deg * PI / 180;
+}
+
+double GeoCoord::toDegrees(double r)
+{
+    return r * 180 / PI;
 }

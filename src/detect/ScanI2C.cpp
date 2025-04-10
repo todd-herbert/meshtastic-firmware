@@ -6,6 +6,7 @@ const ScanI2C::FoundDevice ScanI2C::DEVICE_NONE = ScanI2C::FoundDevice(ScanI2C::
 ScanI2C::ScanI2C() = default;
 
 void ScanI2C::scanPort(ScanI2C::I2CPort port) {}
+void ScanI2C::scanPort(ScanI2C::I2CPort port, uint8_t *address, uint8_t asize) {}
 
 void ScanI2C::setSuppressScreen()
 {
@@ -30,14 +31,20 @@ ScanI2C::FoundDevice ScanI2C::firstRTC() const
 
 ScanI2C::FoundDevice ScanI2C::firstKeyboard() const
 {
-    ScanI2C::DeviceType types[] = {CARDKB, TDECKKB, BBQ10KB, RAK14004};
-    return firstOfOrNONE(4, types);
+    ScanI2C::DeviceType types[] = {CARDKB, TDECKKB, BBQ10KB, RAK14004, MPR121KB, TCA8418KB};
+    return firstOfOrNONE(6, types);
 }
 
 ScanI2C::FoundDevice ScanI2C::firstAccelerometer() const
 {
-    ScanI2C::DeviceType types[] = {MPU6050, LIS3DH, BMA423, LSM6DS3};
-    return firstOfOrNONE(4, types);
+    ScanI2C::DeviceType types[] = {MPU6050, LIS3DH, BMA423, LSM6DS3, BMX160, STK8BAXX, ICM20948, QMA6100P};
+    return firstOfOrNONE(8, types);
+}
+
+ScanI2C::FoundDevice ScanI2C::firstRGBLED() const
+{
+    ScanI2C::DeviceType types[] = {NCP5623, LP5562};
+    return firstOfOrNONE(2, types);
 }
 
 ScanI2C::FoundDevice ScanI2C::find(ScanI2C::DeviceType) const

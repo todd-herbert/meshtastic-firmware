@@ -56,7 +56,6 @@ extern "C" {
 #define LED_CONN PIN_GREEN
 
 #define LED_STATE_ON 0 // State when LED is lit
-#define LED_INVERTED 1
 
 /*
  * Buttons
@@ -163,8 +162,6 @@ External serial flash WP25R1635FZUIL0
 #define PIN_POWER_EN (0 + 12)
 // #define PIN_POWER_EN1 (0 + 13)
 
-#define USE_EINK
-
 #define PIN_SPI1_MISO                                                                                                            \
     (32 + 7) // FIXME not really needed, but for now the SPI code requires something to be defined, pick an used GPIO
 #define PIN_SPI1_MOSI PIN_EINK_MOSI
@@ -216,6 +213,8 @@ External serial flash WP25R1635FZUIL0
 #define AREF_VOLTAGE 3.0
 #define VBAT_AR_INTERNAL AR_INTERNAL_3_0
 #define ADC_MULTIPLIER (2.0F)
+
+#define NO_EXT_GPIO 1
 
 #define HAS_RTC 1
 

@@ -92,6 +92,8 @@ class Channels
     // Returns true if any of our channels have enabled MQTT uplink or downlink
     bool anyMqttEnabled();
 
+    bool ensureLicensedOperation();
+
   private:
     /** Given a channel index, change to use the crypto key specified by that index
      *
@@ -117,7 +119,12 @@ class Channels
     meshtastic_Channel &fixupChannel(ChannelIndex chIndex);
 
     /**
-     * Write a default channel to the specified channel index
+     * Writes the default lora config
+     */
+    void initDefaultLoraConfig();
+
+    /**
+     * Write default channels defined in UserPrefs
      */
     void initDefaultChannel(ChannelIndex chIndex);
 

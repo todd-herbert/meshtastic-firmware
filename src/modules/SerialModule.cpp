@@ -60,14 +60,14 @@
 SerialModule *serialModule;
 SerialModuleRadio *serialModuleRadio;
 
-#if defined(TTGO_T_ECHO) || defined(CANARYONE)
-SerialModule::SerialModule() : StreamAPI(&Serial), concurrency::OSThread("SerialModule") {}
+#if defined(TTGO_T_ECHO) || defined(CANARYONE) || defined(MESHLINK) || defined(ELECROW_ThinkNode_M1)
+SerialModule::SerialModule() : StreamAPI(&Serial), concurrency::OSThread("Serial") {}
 static Print *serialPrint = &Serial;
 #elif defined(CONFIG_IDF_TARGET_ESP32C6)
-SerialModule::SerialModule() : StreamAPI(&Serial1), concurrency::OSThread("SerialModule") {}
+SerialModule::SerialModule() : StreamAPI(&Serial1), concurrency::OSThread("Serial") {}
 static Print *serialPrint = &Serial1;
 #else
-SerialModule::SerialModule() : StreamAPI(&Serial2), concurrency::OSThread("SerialModule") {}
+SerialModule::SerialModule() : StreamAPI(&Serial2), concurrency::OSThread("Serial") {}
 static Print *serialPrint = &Serial2;
 #endif
 
@@ -125,7 +125,7 @@ int32_t SerialModule::runOnce()
     if (moduleConfig.serial.override_console_serial_port || (moduleConfig.serial.rxd && moduleConfig.serial.txd)) {
         if (firstTime) {
             // Interface with the serial peripheral from in here.
-            LOG_INFO("Initializing serial peripheral interface\n");
+            LOG_INFO("Init serial peripheral interface");
 
             uint32_t baud = getBaudRate();
 
@@ -158,7 +158,7 @@ int32_t SerialModule::runOnce()
                 Serial.begin(baud);
                 Serial.setTimeout(moduleConfig.serial.timeout > 0 ? moduleConfig.serial.timeout : TIMEOUT);
             }
-#elif !defined(TTGO_T_ECHO) && !defined(CANARYONE)
+#elif !defined(TTGO_T_ECHO) && !defined(CANARYONE) && !defined(MESHLINK) && !defined(ELECROW_ThinkNode_M1)
             if (moduleConfig.serial.rxd && moduleConfig.serial.txd) {
 #ifdef ARCH_RP2040
                 Serial2.setFIFOSize(RX_BUFFER);
@@ -204,15 +204,17 @@ int32_t SerialModule::runOnce()
                     lastNmeaTime = millis();
                     uint32_t readIndex = 0;
                     const meshtastic_NodeInfoLite *tempNodeInfo = nodeDB->readNextMeshNode(readIndex);
-                    while (tempNodeInfo != NULL && tempNodeInfo->has_user && hasValidPosition(tempNodeInfo)) {
-                        printWPL(outbuf, sizeof(outbuf), tempNodeInfo->position, tempNodeInfo->user.long_name, true);
-                        serialPrint->printf("%s", outbuf);
+                    while (tempNodeInfo != NULL) {
+                        if (tempNodeInfo->has_user && nodeDB->hasValidPosition(tempNodeInfo)) {
+                            printWPL(outbuf, sizeof(outbuf), tempNodeInfo->position, tempNodeInfo->user.long_name, true);
+                            serialPrint->printf("%s", outbuf);
+                        }
                         tempNodeInfo = nodeDB->readNextMeshNode(readIndex);
                     }
                 }
             }
 
-#if !defined(TTGO_T_ECHO) && !defined(CANARYONE)
+#if !defined(TTGO_T_ECHO) && !defined(CANARYONE) && !defined(MESHLINK) && !defined(ELECROW_ThinkNode_M1)
             else if ((moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_WS85)) {
                 processWXSerial();
 
@@ -252,7 +254,12 @@ void SerialModule::sendTelemetry(meshtastic_Telemetry m)
         pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), &meshtastic_Telemetry_msg, &m);
     p->to = NODENUM_BROADCAST;
     p->decoded.want_response = false;
-    p->priority = meshtastic_MeshPacket_Priority_RELIABLE;
+    if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR) {
+        p->want_ack = true;
+        p->priority = meshtastic_MeshPacket_Priority_HIGH;
+    } else {
+        p->priority = meshtastic_MeshPacket_Priority_RELIABLE;
+    }
     service->sendToMesh(p, RX_SRC_LOCAL, true);
 }
 
@@ -307,10 +314,10 @@ ProcessMessage SerialModuleRadio::handleReceived(const meshtastic_MeshPacket &mp
         }
 
         auto &p = mp.decoded;
-        // LOG_DEBUG("Received text msg self=0x%0x, from=0x%0x, to=0x%0x, id=%d, msg=%.*s\n",
+        // LOG_DEBUG("Received text msg self=0x%0x, from=0x%0x, to=0x%0x, id=%d, msg=%.*s",
         //          nodeDB->getNodeNum(), mp.from, mp.to, mp.id, p.payload.size, p.payload.bytes);
 
-        if (getFrom(&mp) == nodeDB->getNodeNum()) {
+        if (isFromUs(&mp)) {
 
             /*
              * If moduleConfig.serial.echo is true, then echo the packets that are sent out
@@ -322,7 +329,7 @@ ProcessMessage SerialModuleRadio::handleReceived(const meshtastic_MeshPacket &mp
                 //   TODO: need to find out why.
                 if (lastRxID != mp.id) {
                     lastRxID = mp.id;
-                    // LOG_DEBUG("* * Message came this device\n");
+                    // LOG_DEBUG("* * Message came this device");
                     // serialPrint->println("* * Message came this device");
                     serialPrint->printf("%s", p.payload.bytes);
                 }
@@ -409,7 +416,8 @@ uint32_t SerialModule::getBaudRate()
  */
 void SerialModule::processWXSerial()
 {
-#if !defined(TTGO_T_ECHO) && !defined(CANARYONE) && !defined(CONFIG_IDF_TARGET_ESP32C6)
+#if !defined(TTGO_T_ECHO) && !defined(CANARYONE) && !defined(CONFIG_IDF_TARGET_ESP32C6) && !defined(MESHLINK) &&                 \
+    !defined(ELECROW_ThinkNode_M1)
     static unsigned int lastAveraged = 0;
     static unsigned int averageIntervalMillis = 300000; // 5 minutes hard coded.
     static double dir_sum_sin = 0;
@@ -424,8 +432,14 @@ void SerialModule::processWXSerial()
     static char windGust[5] = "xx.x"; // Assuming windGust is 4 characters long + null terminator
     static char batVoltage[5] = "0.0V";
     static char capVoltage[5] = "0.0V";
+    static char temperature[5] = "00.0";
     static float batVoltageF = 0;
     static float capVoltageF = 0;
+    static float temperatureF = 0;
+
+    static char rainStr[] = "5780860000";
+    static int rainSum = 0;
+    static float rain = 0;
     bool gotwind = false;
 
     while (Serial2.available()) {
@@ -439,6 +453,9 @@ void SerialModule::processWXSerial()
         // WindSpeed    = 0.5
         // WindGust     = 0.6
         // GXTS04Temp   = 24.4
+
+        // RainIntSum     = 0
+        // Rain           = 0.0
         if (serialPayloadSize > 0) {
             // Define variables for line processing
             int lineStart = 0;
@@ -452,57 +469,83 @@ void SerialModule::processWXSerial()
                     // Extract the current line
                     char line[meshtastic_Constants_DATA_PAYLOAD_LEN];
                     memset(line, '\0', sizeof(line));
-                    memcpy(line, &serialBytes[lineStart], lineEnd - lineStart);
+                    if (lineEnd - lineStart < sizeof(line) - 1) {
+                        memcpy(line, &serialBytes[lineStart], lineEnd - lineStart);
+                        if (strstr(line, "Wind") != NULL) // we have a wind line
+                        {
+                            gotwind = true;
+                            // Find the positions of "=" signs in the line
+                            char *windDirPos = strstr(line, "WindDir      = ");
+                            char *windSpeedPos = strstr(line, "WindSpeed    = ");
+                            char *windGustPos = strstr(line, "WindGust     = ");
 
-                    if (strstr(line, "Wind") != NULL) // we have a wind line
-                    {
-                        gotwind = true;
-                        // Find the positions of "=" signs in the line
-                        char *windDirPos = strstr(line, "WindDir      = ");
-                        char *windSpeedPos = strstr(line, "WindSpeed    = ");
-                        char *windGustPos = strstr(line, "WindGust     = ");
+                            if (windDirPos != NULL) {
+                                // Extract data after "=" for WindDir
+                                strlcpy(windDir, windDirPos + 15, sizeof(windDir)); // Add 15 to skip "WindDir = "
+                                double radians = GeoCoord::toRadians(strtof(windDir, nullptr));
+                                dir_sum_sin += sin(radians);
+                                dir_sum_cos += cos(radians);
+                                dirCount++;
+                            } else if (windSpeedPos != NULL) {
+                                // Extract data after "=" for WindSpeed
+                                strlcpy(windVel, windSpeedPos + 15, sizeof(windVel)); // Add 15 to skip "WindSpeed = "
+                                float newv = strtof(windVel, nullptr);
+                                velSum += newv;
+                                velCount++;
+                                if (newv < lull || lull == -1)
+                                    lull = newv;
 
-                        if (windDirPos != NULL) {
-                            // Extract data after "=" for WindDir
-                            strcpy(windDir, windDirPos + 15); // Add 15 to skip "WindDir = "
-                            double radians = toRadians(strtof(windDir, nullptr));
-                            dir_sum_sin += sin(radians);
-                            dir_sum_cos += cos(radians);
-                            dirCount++;
-                        } else if (windSpeedPos != NULL) {
-                            // Extract data after "=" for WindSpeed
-                            strcpy(windVel, windSpeedPos + 15); // Add 15 to skip "WindSpeed = "
-                            float newv = strtof(windVel, nullptr);
-                            velSum += newv;
-                            velCount++;
-                            if (newv < lull || lull == -1)
-                                lull = newv;
+                            } else if (windGustPos != NULL) {
+                                strlcpy(windGust, windGustPos + 15, sizeof(windGust)); // Add 15 to skip "WindSpeed = "
+                                float newg = strtof(windGust, nullptr);
+                                if (newg > gust)
+                                    gust = newg;
+                            }
 
-                        } else if (windGustPos != NULL) {
-                            strcpy(windGust, windGustPos + 15); // Add 15 to skip "WindSpeed = "
-                            float newg = strtof(windGust, nullptr);
-                            if (newg > gust)
-                                gust = newg;
+                            // these are also voltage data we care about possibly
+                        } else if (strstr(line, "BatVoltage") != NULL) { // we have a battVoltage line
+                            char *batVoltagePos = strstr(line, "BatVoltage     = ");
+                            if (batVoltagePos != NULL) {
+                                strlcpy(batVoltage, batVoltagePos + 17, sizeof(batVoltage)); // 18 for ws 80, 17 for ws85
+                                batVoltageF = strtof(batVoltage, nullptr);
+                                break; // last possible data we want so break
+                            }
+                        } else if (strstr(line, "CapVoltage") != NULL) { // we have a cappVoltage line
+                            char *capVoltagePos = strstr(line, "CapVoltage     = ");
+                            if (capVoltagePos != NULL) {
+                                strlcpy(capVoltage, capVoltagePos + 17, sizeof(capVoltage)); // 18 for ws 80, 17 for ws85
+                                capVoltageF = strtof(capVoltage, nullptr);
+                            }
+                            // GXTS04Temp   = 24.4
+                        } else if (strstr(line, "GXTS04Temp") != NULL) { // we have a temperature line
+                            char *tempPos = strstr(line, "GXTS04Temp   = ");
+                            if (tempPos != NULL) {
+                                strlcpy(temperature, tempPos + 15, sizeof(temperature)); // 15 spaces for ws85
+                                temperatureF = strtof(temperature, nullptr);
+                            }
+
+                        } else if (strstr(line, "RainIntSum") != NULL) { // we have a rainsum line
+                            // LOG_INFO(line);
+                            char *pos = strstr(line, "RainIntSum     = ");
+                            if (pos != NULL) {
+                                strlcpy(rainStr, pos + 17, sizeof(rainStr)); // 17 spaces for ws85
+                                rainSum = int(strtof(rainStr, nullptr));
+                            }
+
+                        } else if (strstr(line, "Rain") != NULL) {  // we have a rain line
+                            if (strstr(line, "WaveRain") == NULL) { // skip WaveRain lines though.
+                                // LOG_INFO(line);
+                                char *pos = strstr(line, "Rain           = ");
+                                if (pos != NULL) {
+                                    strlcpy(rainStr, pos + 17, sizeof(rainStr)); // 17 spaces for ws85
+                                    rain = strtof(rainStr, nullptr);
+                                }
+                            }
                         }
 
-                        // these are also voltage data we care about possibly
-                    } else if (strstr(line, "BatVoltage") != NULL) { // we have a battVoltage line
-                        char *batVoltagePos = strstr(line, "BatVoltage     = ");
-                        if (batVoltagePos != NULL) {
-                            strcpy(batVoltage, batVoltagePos + 17); // 18 for ws 80, 17 for ws85
-                            batVoltageF = strtof(batVoltage, nullptr);
-                            break; // last possible data we want so break
-                        }
-                    } else if (strstr(line, "CapVoltage") != NULL) { // we have a cappVoltage line
-                        char *capVoltagePos = strstr(line, "CapVoltage     = ");
-                        if (capVoltagePos != NULL) {
-                            strcpy(capVoltage, capVoltagePos + 17); // 18 for ws 80, 17 for ws85
-                            capVoltageF = strtof(capVoltage, nullptr);
-                        }
+                        // Update lineStart for the next line
+                        lineStart = lineEnd + 1;
                     }
-
-                    // Update lineStart for the next line
-                    lineStart = lineEnd + 1;
                 }
             }
             break;
@@ -514,18 +557,18 @@ void SerialModule::processWXSerial()
     }
     if (gotwind) {
 
-        LOG_INFO("WS85 : %i %.1fg%.1f %.1fv %.1fv\n", atoi(windDir), strtof(windVel, nullptr), strtof(windGust, nullptr),
-                 batVoltageF, capVoltageF);
+        LOG_INFO("WS85 : %i %.1fg%.1f %.1fv %.1fv %.1fC rain: %.1f, %i sum", atoi(windDir), strtof(windVel, nullptr),
+                 strtof(windGust, nullptr), batVoltageF, capVoltageF, temperatureF, rain, rainSum);
     }
     if (gotwind && !Throttle::isWithinTimespanMs(lastAveraged, averageIntervalMillis)) {
-        // calulate averages and send to the mesh
+        // calculate averages and send to the mesh
         float velAvg = 1.0 * velSum / velCount;
 
         double avgSin = dir_sum_sin / dirCount;
         double avgCos = dir_sum_cos / dirCount;
 
         double avgRadians = atan2(avgSin, avgCos);
-        float dirAvg = toDegrees(avgRadians);
+        float dirAvg = GeoCoord::toDegrees(avgRadians);
 
         if (dirAvg < 0) {
             dirAvg += 360.0;
@@ -535,17 +578,39 @@ void SerialModule::processWXSerial()
         // make a telemetry packet with the data
         meshtastic_Telemetry m = meshtastic_Telemetry_init_zero;
         m.which_variant = meshtastic_Telemetry_environment_metrics_tag;
+
         m.variant.environment_metrics.wind_speed = velAvg;
+        m.variant.environment_metrics.has_wind_speed = true;
+
         m.variant.environment_metrics.wind_direction = dirAvg;
-        m.variant.environment_metrics.wind_gust = gust;
-        m.variant.environment_metrics.wind_lull = lull;
+        m.variant.environment_metrics.has_wind_direction = true;
+
+        m.variant.environment_metrics.temperature = temperatureF;
+        m.variant.environment_metrics.has_temperature = true;
+
         m.variant.environment_metrics.voltage =
             capVoltageF > batVoltageF ? capVoltageF : batVoltageF; // send the larger of the two voltage values.
+        m.variant.environment_metrics.has_voltage = true;
 
-        LOG_INFO("WS85 Transmit speed=%fm/s, direction=%d , lull=%f, gust=%f, voltage=%f\n",
+        m.variant.environment_metrics.wind_gust = gust;
+        m.variant.environment_metrics.has_wind_gust = true;
+
+        m.variant.environment_metrics.rainfall_24h = rainSum;
+        m.variant.environment_metrics.has_rainfall_24h = true;
+
+        // not sure if this value is actually the 1hr sum so needs to do some testing
+        m.variant.environment_metrics.rainfall_1h = rain;
+        m.variant.environment_metrics.has_rainfall_1h = true;
+
+        if (lull == -1)
+            lull = 0;
+        m.variant.environment_metrics.wind_lull = lull;
+        m.variant.environment_metrics.has_wind_lull = true;
+
+        LOG_INFO("WS85 Transmit speed=%fm/s, direction=%d , lull=%f, gust=%f, voltage=%f temperature=%f",
                  m.variant.environment_metrics.wind_speed, m.variant.environment_metrics.wind_direction,
                  m.variant.environment_metrics.wind_lull, m.variant.environment_metrics.wind_gust,
-                 m.variant.environment_metrics.voltage);
+                 m.variant.environment_metrics.voltage, m.variant.environment_metrics.temperature);
 
         sendTelemetry(m);
 

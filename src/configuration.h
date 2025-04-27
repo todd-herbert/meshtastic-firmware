@@ -114,6 +114,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define CARDKB_ADDR 0x5F
 #define TDECK_KB_ADDR 0x55
 #define BBQ10_KB_ADDR 0x1F
+#define MPR121_KB_ADDR 0x5A
 
 // -----------------------------------------------------------------------------
 // SENSOR
@@ -134,7 +135,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define LPS22HB_ADDR 0x5C
 #define LPS22HB_ADDR_ALT 0x5D
 #define SHT31_4x_ADDR 0x44
+#define SHT31_4x_ADDR_ALT 0x45
 #define PMSA0031_ADDR 0x12
+#define QMA6100P_ADDR 0x12
 #define AHT10_ADDR 0x38
 #define RCWL9620_ADDR 0x57
 #define VEML7700_ADDR 0x10
@@ -143,14 +146,20 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define OPT3001_ADDR_ALT 0x44
 #define MLX90632_ADDR 0x3A
 #define DFROBOT_LARK_ADDR 0x42
+#define DFROBOT_RAIN_ADDR 0x1d
 #define NAU7802_ADDR 0x2A
+#define MAX30102_ADDR 0x57
+#define MLX90614_ADDR_DEF 0x5A
+#define CGRADSENS_ADDR 0x66
+#define LTR390UV_ADDR 0x53
 
 // -----------------------------------------------------------------------------
 // ACCELEROMETER
 // -----------------------------------------------------------------------------
 #define MPU6050_ADDR 0x68
-#define STK8BXX_ADR 0x18
-#define LIS3DH_ADR 0x18
+#define STK8BXX_ADDR 0x18
+#define LIS3DH_ADDR 0x18
+#define LIS3DH_ADDR_ALT 0x19
 #define BMA423_ADDR 0x19
 #define LSM6DS3_ADDR 0x6A
 #define BMX160_ADDR 0x69
@@ -165,7 +174,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // -----------------------------------------------------------------------------
 // Security
 // -----------------------------------------------------------------------------
-#define ATECC608B_ADDR 0x35
 
 // -----------------------------------------------------------------------------
 // IO Expander
@@ -174,16 +182,14 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define TCA9555_ADDR 0x26
 
 // -----------------------------------------------------------------------------
-// GPS
-// -----------------------------------------------------------------------------
-#ifndef GPS_THREAD_INTERVAL
-#define GPS_THREAD_INTERVAL 200
-#endif
-
-// -----------------------------------------------------------------------------
 // Touchscreen
 // -----------------------------------------------------------------------------
 #define FT6336U_ADDR 0x48
+
+// -----------------------------------------------------------------------------
+// BIAS-T Generator
+// -----------------------------------------------------------------------------
+#define TPS65233_ADDR 0x60
 
 // convert 24-bit color to 16-bit (56K)
 #define COLOR565(r, g, b) (((r & 0xF8) << 8) | ((g & 0xFC) << 3) | ((b & 0xF8) >> 3))
@@ -196,8 +202,19 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define VEXT_ON_VALUE LOW
 #endif
 
+// -----------------------------------------------------------------------------
+// GPS
+// -----------------------------------------------------------------------------
+
 #ifndef GPS_BAUDRATE
 #define GPS_BAUDRATE 9600
+#define GPS_BAUDRATE_FIXED 0
+#else
+#define GPS_BAUDRATE_FIXED 1
+#endif
+
+#ifndef GPS_THREAD_INTERVAL
+#define GPS_THREAD_INTERVAL 200
 #endif
 
 /* Step #2: follow with defines common to the architecture;
@@ -236,6 +253,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #endif
 #ifndef HAS_SCREEN
 #define HAS_SCREEN 0
+#endif
+#ifndef HAS_TFT
+#define HAS_TFT 0
 #endif
 #ifndef HAS_WIRE
 #define HAS_WIRE 0
@@ -299,6 +319,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define MESHTASTIC_EXCLUDE_AUDIO 1
 #define MESHTASTIC_EXCLUDE_DETECTIONSENSOR 1
 #define MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR 1
+#define MESHTASTIC_EXCLUDE_HEALTH_TELEMETRY 1
 #define MESHTASTIC_EXCLUDE_EXTERNALNOTIFICATION 1
 #define MESHTASTIC_EXCLUDE_PAXCOUNTER 1
 #define MESHTASTIC_EXCLUDE_POWER_TELEMETRY 1

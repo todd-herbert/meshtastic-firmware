@@ -46,7 +46,7 @@ int32_t StoreForwardModule::runOnce()
         } else if (this->heartbeat && (!Throttle::isWithinTimespanMs(lastHeartbeat, heartbeatInterval * 1000)) &&
                    airTime->isTxAllowedChannelUtil(true)) {
             lastHeartbeat = millis();
-            LOG_INFO("*** Sending heartbeat\n");
+            LOG_INFO("Send heartbeat");
             meshtastic_StoreAndForward sf = meshtastic_StoreAndForward_init_zero;
             sf.rr = meshtastic_StoreAndForward_RequestResponse_ROUTER_HEARTBEAT;
             sf.which_variant = meshtastic_StoreAndForward_heartbeat_tag;
@@ -70,14 +70,14 @@ void StoreForwardModule::populatePSRAM()
         https://learn.upesy.com/en/programmation/psram.html#psram-tab
     */
 
-    LOG_DEBUG("*** Before PSRAM initialization: heap %d/%d PSRAM %d/%d\n", memGet.getFreeHeap(), memGet.getHeapSize(),
-              memGet.getFreePsram(), memGet.getPsramSize());
+    LOG_DEBUG("Before PSRAM init: heap %d/%d PSRAM %d/%d", memGet.getFreeHeap(), memGet.getHeapSize(), memGet.getFreePsram(),
+              memGet.getPsramSize());
 
-    /* Use a maximum of 2/3 the available PSRAM unless otherwise specified.
+    /* Use a maximum of 3/4 the available PSRAM unless otherwise specified.
         Note: This needs to be done after every thing that would use PSRAM
     */
     uint32_t numberOfPackets =
-        (this->records ? this->records : (((memGet.getFreePsram() / 3) * 2) / sizeof(PacketHistoryStruct)));
+        (this->records ? this->records : (((memGet.getFreePsram() / 4) * 3) / sizeof(PacketHistoryStruct)));
     this->records = numberOfPackets;
 #if defined(ARCH_ESP32)
     this->packetHistory = static_cast<PacketHistoryStruct *>(ps_calloc(numberOfPackets, sizeof(PacketHistoryStruct)));
@@ -86,9 +86,9 @@ void StoreForwardModule::populatePSRAM()
 
 #endif
 
-    LOG_DEBUG("*** After PSRAM initialization: heap %d/%d PSRAM %d/%d\n", memGet.getFreeHeap(), memGet.getHeapSize(),
-              memGet.getFreePsram(), memGet.getPsramSize());
-    LOG_DEBUG("*** numberOfPackets for packetHistory - %u\n", numberOfPackets);
+    LOG_DEBUG("After PSRAM init: heap %d/%d PSRAM %d/%d", memGet.getFreeHeap(), memGet.getHeapSize(), memGet.getFreePsram(),
+              memGet.getPsramSize());
+    LOG_DEBUG("numberOfPackets for packetHistory - %u", numberOfPackets);
 }
 
 /**
@@ -105,11 +105,11 @@ void StoreForwardModule::historySend(uint32_t secAgo, uint32_t to)
         queueSize = this->historyReturnMax;
 
     if (queueSize) {
-        LOG_INFO("*** S&F - Sending %u message(s)\n", queueSize);
+        LOG_INFO("S&F - Send %u message(s)", queueSize);
         this->busy = true; // runOnce() will pickup the next steps once busy = true.
         this->busyTo = to;
     } else {
-        LOG_INFO("*** S&F - No history to send\n");
+        LOG_INFO("S&F - No history");
     }
     meshtastic_StoreAndForward sf = meshtastic_StoreAndForward_init_zero;
     sf.rr = meshtastic_StoreAndForward_RequestResponse_ROUTER_HISTORY;
@@ -187,7 +187,7 @@ void StoreForwardModule::historyAdd(const meshtastic_MeshPacket &mp)
     const auto &p = mp.decoded;
 
     if (this->packetHistoryTotalCount == this->records) {
-        LOG_WARN("*** S&F - PSRAM Full. Starting overwrite now.\n");
+        LOG_WARN("S&F - PSRAM Full. Starting overwrite");
         this->packetHistoryTotalCount = 0;
         for (auto &i : lastRequest) {
             i.second = 0; // Clear the last request index for each client device
@@ -198,6 +198,9 @@ void StoreForwardModule::historyAdd(const meshtastic_MeshPacket &mp)
     this->packetHistory[this->packetHistoryTotalCount].to = mp.to;
     this->packetHistory[this->packetHistoryTotalCount].channel = mp.channel;
     this->packetHistory[this->packetHistoryTotalCount].from = getFrom(&mp);
+    this->packetHistory[this->packetHistoryTotalCount].id = mp.id;
+    this->packetHistory[this->packetHistoryTotalCount].reply_id = p.reply_id;
+    this->packetHistory[this->packetHistoryTotalCount].emoji = (bool)p.emoji;
     this->packetHistory[this->packetHistoryTotalCount].payload_size = p.payload.size;
     memcpy(this->packetHistory[this->packetHistoryTotalCount].payload, p.payload.bytes, meshtastic_Constants_DATA_PAYLOAD_LEN);
 
@@ -215,7 +218,7 @@ bool StoreForwardModule::sendPayload(NodeNum dest, uint32_t last_time)
 {
     meshtastic_MeshPacket *p = preparePayload(dest, last_time);
     if (p) {
-        LOG_INFO("*** Sending S&F Payload\n");
+        LOG_INFO("Send S&F Payload");
         service->sendToMesh(p);
         this->requestCount++;
         return true;
@@ -244,8 +247,11 @@ meshtastic_MeshPacket *StoreForwardModule::preparePayload(NodeNum dest, uint32_t
 
                 p->to = local ? this->packetHistory[i].to : dest; // PhoneAPI can handle original `to`
                 p->from = this->packetHistory[i].from;
+                p->id = this->packetHistory[i].id;
                 p->channel = this->packetHistory[i].channel;
+                p->decoded.reply_id = this->packetHistory[i].reply_id;
                 p->rx_time = this->packetHistory[i].time;
+                p->decoded.emoji = (uint32_t)this->packetHistory[i].emoji;
 
                 // Let's assume that if the server received the S&F request that the client is in range.
                 //   TODO: Make this configurable.
@@ -331,11 +337,11 @@ void StoreForwardModule::sendErrorTextMessage(NodeNum dest, bool want_response)
     pr->decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
     const char *str;
     if (this->busy) {
-        str = "** S&F - Busy. Try again shortly.";
+        str = "S&F - Busy. Try again shortly.";
     } else {
-        str = "** S&F - Not available on this channel.";
+        str = "S&F not permitted on the public channel.";
     }
-    LOG_WARN("%s\n", str);
+    LOG_WARN("%s", str);
     memcpy(pr->decoded.payload.bytes, str, strlen(str));
     pr->decoded.payload.size = strlen(str);
     if (want_response) {
@@ -365,7 +371,7 @@ void StoreForwardModule::statsSend(uint32_t to)
     sf.variant.stats.return_max = this->historyReturnMax;
     sf.variant.stats.return_window = this->historyReturnWindow;
 
-    LOG_DEBUG("*** Sending S&F Stats\n");
+    LOG_DEBUG("Send S&F Stats");
     storeForwardModule->sendMessage(to, sf);
 }
 
@@ -382,9 +388,8 @@ ProcessMessage StoreForwardModule::handleReceived(const meshtastic_MeshPacket &m
 
         if ((mp.decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP) && is_server) {
             auto &p = mp.decoded;
-            if (mp.to == nodeDB->getNodeNum() && (p.payload.bytes[0] == 'S') && (p.payload.bytes[1] == 'F') &&
-                (p.payload.bytes[2] == 0x00)) {
-                LOG_DEBUG("*** Legacy Request to send\n");
+            if (isToUs(&mp) && (p.payload.bytes[0] == 'S') && (p.payload.bytes[1] == 'F') && (p.payload.bytes[2] == 0x00)) {
+                LOG_DEBUG("Legacy Request to send");
 
                 // Send the last 60 minutes of messages.
                 if (this->busy || channels.isDefaultChannel(mp.channel)) {
@@ -394,9 +399,9 @@ ProcessMessage StoreForwardModule::handleReceived(const meshtastic_MeshPacket &m
                 }
             } else {
                 storeForwardModule->historyAdd(mp);
-                LOG_INFO("*** S&F stored. Message history contains %u records now.\n", this->packetHistoryTotalCount);
+                LOG_INFO("S&F stored. Message history contains %u records now", this->packetHistoryTotalCount);
             }
-        } else if (getFrom(&mp) != nodeDB->getNodeNum() && mp.decoded.portnum == meshtastic_PortNum_STORE_FORWARD_APP) {
+        } else if (!isFromUs(&mp) && mp.decoded.portnum == meshtastic_PortNum_STORE_FORWARD_APP) {
             auto &p = mp.decoded;
             meshtastic_StoreAndForward scratch;
             meshtastic_StoreAndForward *decoded = NULL;
@@ -404,7 +409,7 @@ ProcessMessage StoreForwardModule::handleReceived(const meshtastic_MeshPacket &m
                 if (pb_decode_from_bytes(p.payload.bytes, p.payload.size, &meshtastic_StoreAndForward_msg, &scratch)) {
                     decoded = &scratch;
                 } else {
-                    LOG_ERROR("Error decoding protobuf module!\n");
+                    LOG_ERROR("Error decoding proto module!");
                     // if we can't decode it, nobody can process it!
                     return ProcessMessage::STOP;
                 }
@@ -440,7 +445,7 @@ bool StoreForwardModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp,
         if (is_server) {
             // stop sending stuff, the client wants to abort or has another error
             if ((this->busy) && (this->busyTo == getFrom(&mp))) {
-                LOG_ERROR("*** Client in ERROR or ABORT requested\n");
+                LOG_ERROR("Client in ERROR or ABORT requested");
                 this->requestCount = 0;
                 this->busy = false;
             }
@@ -450,7 +455,7 @@ bool StoreForwardModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp,
     case meshtastic_StoreAndForward_RequestResponse_CLIENT_HISTORY:
         if (is_server) {
             requests_history++;
-            LOG_INFO("*** Client Request to send HISTORY\n");
+            LOG_INFO("Client Request to send HISTORY");
             // Send the last 60 minutes of messages.
             if (this->busy || channels.isDefaultChannel(mp.channel)) {
                 sendErrorTextMessage(getFrom(&mp), mp.decoded.want_response);
@@ -467,7 +472,6 @@ bool StoreForwardModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp,
 
     case meshtastic_StoreAndForward_RequestResponse_CLIENT_PING:
         if (is_server) {
-            LOG_INFO("*** StoreAndForward_RequestResponse_CLIENT_PING\n");
             // respond with a ROUTER PONG
             storeForwardModule->sendMessage(getFrom(&mp), meshtastic_StoreAndForward_RequestResponse_ROUTER_PONG);
         }
@@ -475,17 +479,16 @@ bool StoreForwardModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp,
 
     case meshtastic_StoreAndForward_RequestResponse_CLIENT_PONG:
         if (is_server) {
-            LOG_INFO("*** StoreAndForward_RequestResponse_CLIENT_PONG\n");
             // NodeDB is already updated
         }
         break;
 
     case meshtastic_StoreAndForward_RequestResponse_CLIENT_STATS:
         if (is_server) {
-            LOG_INFO("*** Client Request to send STATS\n");
+            LOG_INFO("Client Request to send STATS");
             if (this->busy) {
                 storeForwardModule->sendMessage(getFrom(&mp), meshtastic_StoreAndForward_RequestResponse_ROUTER_BUSY);
-                LOG_INFO("*** S&F - Busy. Try again shortly.\n");
+                LOG_INFO("S&F - Busy. Try again shortly");
             } else {
                 storeForwardModule->statsSend(getFrom(&mp));
             }
@@ -495,7 +498,7 @@ bool StoreForwardModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp,
     case meshtastic_StoreAndForward_RequestResponse_ROUTER_ERROR:
     case meshtastic_StoreAndForward_RequestResponse_ROUTER_BUSY:
         if (is_client) {
-            LOG_DEBUG("*** StoreAndForward_RequestResponse_ROUTER_BUSY\n");
+            LOG_DEBUG("StoreAndForward_RequestResponse_ROUTER_BUSY");
             // retry in messages_saved * packetTimeMax ms
             retry_delay = millis() + getNumAvailablePackets(this->busyTo, this->last_time) * packetTimeMax *
                                          (meshtastic_StoreAndForward_RequestResponse_ROUTER_ERROR ? 2 : 1);
@@ -511,13 +514,12 @@ bool StoreForwardModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp,
                 heartbeatInterval = p->variant.heartbeat.period;
             }
             lastHeartbeat = millis();
-            LOG_INFO("*** StoreAndForward Heartbeat received\n");
+            LOG_INFO("StoreAndForward Heartbeat received");
         }
         break;
 
     case meshtastic_StoreAndForward_RequestResponse_ROUTER_PING:
         if (is_client) {
-            LOG_DEBUG("*** StoreAndForward_RequestResponse_ROUTER_PING\n");
             // respond with a CLIENT PONG
             storeForwardModule->sendMessage(getFrom(&mp), meshtastic_StoreAndForward_RequestResponse_CLIENT_PONG);
         }
@@ -525,7 +527,7 @@ bool StoreForwardModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp,
 
     case meshtastic_StoreAndForward_RequestResponse_ROUTER_STATS:
         if (is_client) {
-            LOG_DEBUG("*** Router Response STATS\n");
+            LOG_DEBUG("Router Response STATS");
             // These fields only have informational purpose on a client. Fill them to consume later.
             if (p->which_variant == meshtastic_StoreAndForward_stats_tag) {
                 this->records = p->variant.stats.messages_max;
@@ -543,7 +545,7 @@ bool StoreForwardModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp,
             // These fields only have informational purpose on a client. Fill them to consume later.
             if (p->which_variant == meshtastic_StoreAndForward_history_tag) {
                 this->historyReturnWindow = p->variant.history.window / 60000;
-                LOG_INFO("*** Router Response HISTORY - Sending %d messages from last %d minutes\n",
+                LOG_INFO("Router Response HISTORY - Sending %d messages from last %d minutes",
                          p->variant.history.history_messages, this->historyReturnWindow);
             }
         }
@@ -556,7 +558,7 @@ bool StoreForwardModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp,
 }
 
 StoreForwardModule::StoreForwardModule()
-    : concurrency::OSThread("StoreForwardModule"),
+    : concurrency::OSThread("StoreForward"),
       ProtobufModule("StoreForward", meshtastic_PortNum_STORE_FORWARD_APP, &meshtastic_StoreAndForward_msg)
 {
 
@@ -577,7 +579,7 @@ StoreForwardModule::StoreForwardModule()
 
         // Router
         if ((config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER || moduleConfig.store_forward.is_server)) {
-            LOG_INFO("*** Initializing Store & Forward Module in Server mode\n");
+            LOG_INFO("Init Store & Forward Module in Server mode");
             if (memGet.getPsramSize() > 0) {
                 if (memGet.getFreePsram() >= 1024 * 1024) {
 
@@ -605,18 +607,17 @@ StoreForwardModule::StoreForwardModule()
                     this->populatePSRAM();
                     is_server = true;
                 } else {
-                    LOG_INFO("*** Device has less than 1M of PSRAM free.\n");
-                    LOG_INFO("*** Store & Forward Module - disabling server.\n");
+                    LOG_INFO(".");
+                    LOG_INFO("S&F: not enough PSRAM free, Disable");
                 }
             } else {
-                LOG_INFO("*** Device doesn't have PSRAM.\n");
-                LOG_INFO("*** Store & Forward Module - disabling server.\n");
+                LOG_INFO("S&F: device doesn't have PSRAM, Disable");
             }
 
             // Client
         } else {
             is_client = true;
-            LOG_INFO("*** Initializing Store & Forward Module in Client mode\n");
+            LOG_INFO("Init Store & Forward Module in Client mode");
         }
     } else {
         disable();

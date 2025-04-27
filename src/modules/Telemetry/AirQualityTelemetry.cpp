@@ -33,9 +33,10 @@ int32_t AirQualityTelemetryModule::runOnce()
         firstTime = false;
 
         if (moduleConfig.telemetry.air_quality_enabled) {
-            LOG_INFO("Air quality Telemetry: Initializing\n");
+            LOG_INFO("Air quality Telemetry: init");
             if (!aqi.begin_I2C()) {
-                LOG_WARN("Could not establish i2c connection to AQI sensor. Rescanning...\n");
+#ifndef I2C_NO_RESCAN
+                LOG_WARN("Could not establish i2c connection to AQI sensor. Rescan");
                 // rescan for late arriving sensors. AQI Module starts about 10 seconds into the boot so this is plenty.
                 uint8_t i2caddr_scan[] = {PMSA0031_ADDR};
                 uint8_t i2caddr_asize = 1;
@@ -49,11 +50,12 @@ int32_t AirQualityTelemetryModule::runOnce()
                     nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_PMSA003I].first = found.address.address;
                     nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_PMSA003I].second =
                         i2cScanner->fetchI2CBus(found.address);
-                    return 1000;
+                    return setStartDelay();
                 }
+#endif
                 return disable();
             }
-            return 1000;
+            return setStartDelay();
         }
         return disable();
     } else {
@@ -84,11 +86,11 @@ bool AirQualityTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPack
 #ifdef DEBUG_PORT
         const char *sender = getSenderShortName(mp);
 
-        LOG_INFO("(Received from %s): pm10_standard=%i, pm25_standard=%i, pm100_standard=%i\n", sender,
+        LOG_INFO("(Received from %s): pm10_standard=%i, pm25_standard=%i, pm100_standard=%i", sender,
                  t->variant.air_quality_metrics.pm10_standard, t->variant.air_quality_metrics.pm25_standard,
                  t->variant.air_quality_metrics.pm100_standard);
 
-        LOG_INFO("                  | PM1.0(Environmental)=%i, PM2.5(Environmental)=%i, PM10.0(Environmental)=%i\n",
+        LOG_INFO("                  | PM1.0(Environmental)=%i, PM2.5(Environmental)=%i, PM10.0(Environmental)=%i",
                  t->variant.air_quality_metrics.pm10_environmental, t->variant.air_quality_metrics.pm25_environmental,
                  t->variant.air_quality_metrics.pm100_environmental);
 #endif
@@ -105,25 +107,30 @@ bool AirQualityTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPack
 bool AirQualityTelemetryModule::getAirQualityTelemetry(meshtastic_Telemetry *m)
 {
     if (!aqi.read(&data)) {
-        LOG_WARN("Skipping send measurements. Could not read AQIn\n");
+        LOG_WARN("Skip send measurements. Could not read AQIn");
         return false;
     }
 
     m->time = getTime();
     m->which_variant = meshtastic_Telemetry_air_quality_metrics_tag;
+    m->variant.air_quality_metrics.has_pm10_standard = true;
     m->variant.air_quality_metrics.pm10_standard = data.pm10_standard;
+    m->variant.air_quality_metrics.has_pm25_standard = true;
     m->variant.air_quality_metrics.pm25_standard = data.pm25_standard;
+    m->variant.air_quality_metrics.has_pm100_standard = true;
     m->variant.air_quality_metrics.pm100_standard = data.pm100_standard;
 
+    m->variant.air_quality_metrics.has_pm10_environmental = true;
     m->variant.air_quality_metrics.pm10_environmental = data.pm10_env;
+    m->variant.air_quality_metrics.has_pm25_environmental = true;
     m->variant.air_quality_metrics.pm25_environmental = data.pm25_env;
+    m->variant.air_quality_metrics.has_pm100_environmental = true;
     m->variant.air_quality_metrics.pm100_environmental = data.pm100_env;
 
-    LOG_INFO("(Sending): PM1.0(Standard)=%i, PM2.5(Standard)=%i, PM10.0(Standard)=%i\n",
-             m->variant.air_quality_metrics.pm10_standard, m->variant.air_quality_metrics.pm25_standard,
-             m->variant.air_quality_metrics.pm100_standard);
+    LOG_INFO("Send: PM1.0(Standard)=%i, PM2.5(Standard)=%i, PM10.0(Standard)=%i", m->variant.air_quality_metrics.pm10_standard,
+             m->variant.air_quality_metrics.pm25_standard, m->variant.air_quality_metrics.pm100_standard);
 
-    LOG_INFO("         | PM1.0(Environmental)=%i, PM2.5(Environmental)=%i, PM10.0(Environmental)=%i\n",
+    LOG_INFO("         | PM1.0(Environmental)=%i, PM2.5(Environmental)=%i, PM10.0(Environmental)=%i",
              m->variant.air_quality_metrics.pm10_environmental, m->variant.air_quality_metrics.pm25_environmental,
              m->variant.air_quality_metrics.pm100_environmental);
 
@@ -141,14 +148,14 @@ meshtastic_MeshPacket *AirQualityTelemetryModule::allocReply()
         if (pb_decode_from_bytes(p.payload.bytes, p.payload.size, &meshtastic_Telemetry_msg, &scratch)) {
             decoded = &scratch;
         } else {
-            LOG_ERROR("Error decoding AirQualityTelemetry module!\n");
+            LOG_ERROR("Error decoding AirQualityTelemetry module!");
             return NULL;
         }
         // Check for a request for air quality metrics
         if (decoded->which_variant == meshtastic_Telemetry_air_quality_metrics_tag) {
             meshtastic_Telemetry m = meshtastic_Telemetry_init_zero;
             if (getAirQualityTelemetry(&m)) {
-                LOG_INFO("Air quality telemetry replying to request\n");
+                LOG_INFO("Air quality telemetry reply to request");
                 return allocDataProtobuf(m);
             } else {
                 return NULL;
@@ -176,10 +183,10 @@ bool AirQualityTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
 
         lastMeasurementPacket = packetPool.allocCopy(*p);
         if (phoneOnly) {
-            LOG_INFO("Sending packet to phone\n");
+            LOG_INFO("Send packet to phone");
             service->sendToPhone(p);
         } else {
-            LOG_INFO("Sending packet to mesh\n");
+            LOG_INFO("Send packet to mesh");
             service->sendToMesh(p, RX_SRC_LOCAL, true);
         }
         return true;

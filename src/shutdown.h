@@ -3,6 +3,7 @@
 #include "graphics/Screen.h"
 #include "main.h"
 #include "power.h"
+#include "sleep.h"
 #if defined(ARCH_PORTDUINO)
 #include "api/WiFiServerAPI.h"
 #include "input/LinuxInputImpl.h"
@@ -12,7 +13,8 @@
 void powerCommandsCheck()
 {
     if (rebootAtMsec && millis() > rebootAtMsec) {
-        LOG_INFO("Rebooting\n");
+        LOG_INFO("Rebooting");
+        notifyReboot.notifyObservers(NULL);
 #if defined(ARCH_ESP32)
         ESP.restart();
 #elif defined(ARCH_NRF52)
@@ -28,11 +30,13 @@ void powerCommandsCheck()
         Serial1.end();
         if (screen)
             delete screen;
-        LOG_DEBUG("final reboot!\n");
+        LOG_DEBUG("final reboot!");
         reboot();
+#elif defined(ARCH_STM32WL)
+        HAL_NVIC_SystemReset();
 #else
         rebootAtMsec = -1;
-        LOG_WARN("FIXME implement reboot for this platform. Note that some settings require a restart to be applied.\n");
+        LOG_WARN("FIXME implement reboot for this platform. Note that some settings require a restart to be applied");
 #endif
     }
 
@@ -43,8 +47,8 @@ void powerCommandsCheck()
 #endif
 
     if (shutdownAtMsec && millis() > shutdownAtMsec) {
-        LOG_INFO("Shutting down from admin command\n");
-#if defined(ARCH_NRF52) || defined(ARCH_ESP32)
+        LOG_INFO("Shut down from admin command");
+#if defined(ARCH_NRF52) || defined(ARCH_ESP32) || defined(ARCH_RP2040)
         playShutdownMelody();
         power->shutdown();
 #elif defined(ARCH_PORTDUINO)

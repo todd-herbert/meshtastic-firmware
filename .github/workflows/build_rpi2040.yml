@@ -7,6 +7,8 @@ on:
         required: true
         type: string
 
+permissions: read-all
+
 jobs:
   build-rpi2040:
     runs-on: ubuntu-latest
@@ -23,3 +25,4 @@ jobs:
           artifact-paths: |
             release/*.uf2
             release/*.elf
+          arch: rp2040

@@ -299,6 +299,27 @@ void NimbleBluetooth::sendLog(const uint8_t *logMessage, size_t length)
     logRadioCharacteristic->notify(logMessage, length, true);
 }
 
+void NimbleBluetooth::sleep()
+{
+    bleServer->advertiseOnDisconnect(false);
+
+    size_t peersNum = bleServer->getConnectedCount();
+    for (int i = 0; i < peersNum; i++) {
+        uint16_t connID = bleServer->getPeerInfo(i).getConnHandle();
+        bleServer->disconnect(connID, 0x13);
+    }
+
+    while (bleServer->getConnectedCount() > 0) {
+        LOG_DEBUG("Waiting for BLE Disconnect");
+        yield();
+    }
+}
+
+void NimbleBluetooth::wake()
+{
+    bleServer->advertiseOnDisconnect(true);
+}
+
 void clearNVS()
 {
     NimBLEDevice::deleteAllBonds();

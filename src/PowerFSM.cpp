@@ -19,6 +19,8 @@
 #include "sleep.h"
 #include "target_specific.h"
 
+static bool bleSleep = false;
+
 #if HAS_WIFI && !defined(ARCH_PORTDUINO) || defined(MESHTASTIC_EXCLUDE_WIFI)
 #include "mesh/wifi/WiFiAPClient.h"
 #endif
@@ -101,6 +103,11 @@ static void lsIdle()
             // Briefly come out of sleep long enough to blink the led once every few seconds
             uint32_t sleepTime = SLEEP_TIME;
 
+            if (!bleSleep) {
+                nimbleBluetooth->sleep();
+                bleSleep = true;
+            }
+
             powerMon->setState(meshtastic_PowerMon_State_CPU_LightSleep);
             ledBlink.set(false); // Never leave led on while in light sleep
             esp_sleep_source_t wakeCause2 = doLightSleep(sleepTime * 1000LL);
@@ -130,6 +137,12 @@ static void lsIdle()
 #else
                 bool pressed = false;
 #endif
+
+                if (bleSleep) {
+                    nimbleBluetooth->wake();
+                    bleSleep = false;
+                }
+
                 if (pressed) { // If we woke because of press, instead generate a PRESS event.
                     powerFSM.trigger(EVENT_PRESS);
                 } else {

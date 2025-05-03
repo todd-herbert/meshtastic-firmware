@@ -13,6 +13,9 @@ class NimbleBluetooth : BluetoothApi
     int getRssi();
     void sendLog(const uint8_t *logMessage, size_t length);
 
+    void sleep();
+    void wake();
+
   private:
     void setupService();
     void startAdvertising();

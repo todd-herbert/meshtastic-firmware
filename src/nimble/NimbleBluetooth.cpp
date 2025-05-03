@@ -301,23 +301,12 @@ void NimbleBluetooth::sendLog(const uint8_t *logMessage, size_t length)
 
 void NimbleBluetooth::sleep()
 {
-    size_t peersNum = bleServer->getConnectedCount();
-    for (int i = 0; i < peersNum; i++) {
-        uint16_t connID = bleServer->getPeerInfo(i).getConnHandle();
-        bleServer->disconnect(connID, 0x13);
-    }
-
-    while (bleServer->getConnectedCount() > 0) {
-        LOG_DEBUG("Waiting for BLE Disconnect");
-        yield();
-    }
-
-    bleServer->stopAdvertising();
+    delay(500);
 }
 
 void NimbleBluetooth::wake()
 {
-    bleServer->startAdvertising();
+    delay(500);
 }
 
 void clearNVS()

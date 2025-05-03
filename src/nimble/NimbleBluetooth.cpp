@@ -301,8 +301,6 @@ void NimbleBluetooth::sendLog(const uint8_t *logMessage, size_t length)
 
 void NimbleBluetooth::sleep()
 {
-    bleServer->advertiseOnDisconnect(false);
-
     size_t peersNum = bleServer->getConnectedCount();
     for (int i = 0; i < peersNum; i++) {
         uint16_t connID = bleServer->getPeerInfo(i).getConnHandle();
@@ -313,11 +311,13 @@ void NimbleBluetooth::sleep()
         LOG_DEBUG("Waiting for BLE Disconnect");
         yield();
     }
+
+    bleServer->stopAdvertising();
 }
 
 void NimbleBluetooth::wake()
 {
-    bleServer->advertiseOnDisconnect(true);
+    bleServer->startAdvertising();
 }
 
 void clearNVS()

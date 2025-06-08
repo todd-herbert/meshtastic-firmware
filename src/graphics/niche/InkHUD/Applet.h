@@ -130,14 +130,18 @@ class Applet : public GFX
     static constexpr float LOGO_ASPECT_RATIO = 1.9;                    // Width:Height for drawing the Meshtastic logo
     uint16_t getLogoWidth(uint16_t limitWidth, uint16_t limitHeight);  // Size Meshtastic logo to fit within region
     uint16_t getLogoHeight(uint16_t limitWidth, uint16_t limitHeight); // Size Meshtastic logo to fit within region
-    void drawLogo(int16_t centerX, int16_t centerY, uint16_t width, uint16_t height); // Draw the meshtastic logo
+    void drawLogo(int16_t centerX, int16_t centerY, uint16_t width, uint16_t height,
+                  Color color = BLACK); // Draw the Meshtastic logo
 
-    std::string hexifyNodeNum(NodeNum num);                  // Style as !0123abdc
-    SignalStrength getSignalStrength(float snr, float rssi); // Interpret SNR and RSSI, as an easy to understand value
-    std::string getTimeString(uint32_t epochSeconds);        // Human readable
-    std::string getTimeString();                             // Current time, human readable
-    uint16_t getActiveNodeCount();                           // Duration determined by user, in onscreen menu
-    std::string localizeDistance(uint32_t meters);           // Human readable distance, imperial or metric
+    std::string hexifyNodeNum(NodeNum num);                    // Style as !0123abdc
+    SignalStrength getSignalStrength(float snr, float rssi);   // Interpret SNR and RSSI, as an easy to understand value
+    std::string getTimeString(uint32_t epochSeconds);          // Human readable
+    std::string getTimeString();                               // Current time, human readable
+    uint16_t getActiveNodeCount();                             // Duration determined by user, in onscreen menu
+    std::string localizeDistance(uint32_t meters);             // Human readable distance, imperial or metric
+    std::string parse(std::string text);                       // Handle text which might contain special chars
+    std::string parseShortName(meshtastic_NodeInfoLite *node); // Get the shortname, or a substitute if has unprintable chars
+    bool isPrintable(std::string);                             // Check for characters which the font can't print
 
     // Convenient references
 

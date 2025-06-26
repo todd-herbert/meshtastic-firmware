@@ -797,9 +797,6 @@ void Power::readPowerStatus()
     if (batteryLevel && powerStatus2.getHasBattery() && !powerStatus2.getHasUSB()) {
         if (batteryLevel->getBattVoltage() < NASTYSOLAR_SLEEP_MV) {
             low_voltage_counter++;
-#if defined(ELECROW_ThinkNode_M1)
-            low_voltage_counter_led3 = low_voltage_counter;
-#endif
             LOG_DEBUG("Low voltage counter: %d/10", low_voltage_counter);
             if (low_voltage_counter > 10) {
 #ifdef ARCH_NRF52
@@ -1138,7 +1135,8 @@ bool Power::axpChipInit()
     }
 
     pinMode(PMU_IRQ, INPUT);
-    attachInterrupt(PMU_IRQ, [] { pmu_irq = true; }, FALLING);
+    attachInterrupt(
+        PMU_IRQ, [] { pmu_irq = true; }, FALLING);
 
     // we do not look for AXPXXX_CHARGING_FINISHED_IRQ & AXPXXX_CHARGING_IRQ because it occurs repeatedly while there is
     // no battery also it could cause inadvertent waking from light sleep just because the battery filled

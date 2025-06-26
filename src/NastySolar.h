@@ -15,7 +15,7 @@
 // How high must the battery recharge before wake is acceptable
 // Provides hysteresis - avoid waking until we're sure we've got decent power
 #ifndef NASTYSOLAR_RECHARGE_MV
-#define NASTYSOLAR_RECHARGE_MV 3700
+#define NASTYSOLAR_RECHARGE_MV 3600
 #endif
 
 // While in low-voltage shutdown, how often should the device wake to check the battery

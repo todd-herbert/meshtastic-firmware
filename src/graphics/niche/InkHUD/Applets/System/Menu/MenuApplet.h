@@ -23,11 +23,16 @@ class MenuApplet : public SystemApplet, public concurrency::OSThread
 {
   public:
     MenuApplet();
+    void onRender() override;
     void onForeground() override;
     void onBackground() override;
+
     void onButtonShortPress() override;
     void onButtonLongPress() override;
-    void onRender() override;
+    void onJoystickDown() override;
+    void onJoystickUp() override;
+    void onJoystickLeft() override;
+    void onJoystickCenter() override;
 
     void show(Tile *t); // Open the menu, onto a user tile
     void goBack();      // Up one menu layer

@@ -538,6 +538,43 @@ void InkHUD::MenuApplet::onButtonLongPress()
         requestUpdate(Drivers::EInk::UpdateTypes::FAST);
 }
 
+// Upwards input event from joystick
+// Move up to the previous menu item (or wrap around)
+void InkHUD::MenuApplet::onJoystickUp()
+{
+    OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL); // Push the auto-close timer back
+
+    cursorShown = true;                                  // Show cursor, in case we just opened the menu
+    cursor = (cursor + items.size() - 1) % items.size(); // Move to previous item. This might wrap around.
+
+    requestUpdate(Drivers::EInk::UpdateTypes::FAST);
+}
+
+// Downwards input event from joystick
+// Move down to next menu item
+void InkHUD::MenuApplet::onJoystickDown()
+{
+    OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL); // Push the auto-close timer back
+    onButtonShortPress();                                    // Scroll down the list of items
+}
+
+// Leftwards input event from joystick
+// Move back to previous layer of the menu
+// If already at root of menu: exit menu entirely
+void InkHUD::MenuApplet::onJoystickLeft()
+{
+    OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL); // Push the auto-close timer back
+    goBack();
+}
+
+// Center press of joystick
+// Execute the currently selected menu item
+void InkHUD::MenuApplet::onJoystickCenter()
+{
+    OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL); // Push the auto-close timer back
+    onButtonLongPress();                                     // Select item / close
+}
+
 // Dynamically create MenuItem entries for activating / deactivating Applets, for the "Applet Selection" submenu
 void InkHUD::MenuApplet::populateAppletPage()
 {

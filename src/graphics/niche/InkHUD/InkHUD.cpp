@@ -80,6 +80,41 @@ void InkHUD::InkHUD::longpress()
     events->onButtonLong();
 }
 
+// Call this when a 4-directional input is moved upwards
+// Should be connected to an input source in nicheGraphics.h
+void InkHUD::InkHUD::joystickUp()
+{
+    events->onJoystickUp();
+}
+
+// Call this when a 4-directional input is moved downwards
+// Should be connected to an input source in nicheGraphics.h
+void InkHUD::InkHUD::joystickDown()
+{
+    events->onJoystickDown();
+}
+
+// Call this when a 4-directional input is moved leftwards
+// Should be connected to an input source in nicheGraphics.h
+void InkHUD::InkHUD::joystickLeft()
+{
+    events->onJoystickLeft();
+}
+
+// Call this when a 4-directional input is moved rightwards
+// Should be connected to an input source in nicheGraphics.h
+void InkHUD::InkHUD::joystickRight()
+{
+    events->onJoystickRight();
+}
+
+// Call this when the center button of a joystick is pressed down
+// This is specifically the "OK" / "Select" input, not one of the directions
+void InkHUD::InkHUD::joystickCenter()
+{
+    events->onJoystickCenter();
+}
+
 // Cycle the next user applet to the foreground
 // Only activated applets are cycled
 // If user has a multi-applet layout, the applets will cycle on the "focused tile"

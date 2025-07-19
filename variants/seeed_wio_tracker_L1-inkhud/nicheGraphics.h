@@ -19,6 +19,7 @@
 // Shared NicheGraphics components
 // --------------------------------
 #include "graphics/niche/Drivers/EInk/ZJY122250_0213BAAMFGN.h"
+#include "graphics/niche/Inputs/GPIOJoystick.h"
 #include "graphics/niche/Inputs/TwoButton.h"
 
 void setupNicheGraphics()
@@ -56,18 +57,19 @@ void setupNicheGraphics()
     // Customize default settings
     inkhud->persistence->settings.rotation = 1;                        // 90 degrees clockwise
     inkhud->persistence->settings.optionalFeatures.batteryIcon = true; // Device definitely has a battery
-    inkhud->persistence->settings.userTiles.count = 1;    // One tile only by default, keep things simple for new users
+    inkhud->persistence->settings.optionalMenuItems.nextTile = false;  // Controlled with Joystick
+    inkhud->persistence->settings.userTiles.count = 2;    // One tile only by default, keep things simple for new users
     inkhud->persistence->settings.userTiles.maxCount = 2; // Two applets side-by-side
 
     // Pick applets
     // Note: order of applets determines priority of "auto-show" feature
-    inkhud->addApplet("All Messages", new InkHUD::AllMessageApplet, true, true); // Activated, autoshown
-    inkhud->addApplet("DMs", new InkHUD::DMApplet);                              // -
-    inkhud->addApplet("Channel 0", new InkHUD::ThreadedMessageApplet(0));        // -
-    inkhud->addApplet("Channel 1", new InkHUD::ThreadedMessageApplet(1));        // -
-    inkhud->addApplet("Positions", new InkHUD::PositionsApplet, true);           // Activated
-    inkhud->addApplet("Recents List", new InkHUD::RecentsListApplet);            // -
-    inkhud->addApplet("Heard", new InkHUD::HeardApplet, true, false, 0);         // Activated, no autoshow, default on tile 0
+    inkhud->addApplet("All Messages", new InkHUD::AllMessageApplet, true, true, 0); // Activated, autoshown
+    inkhud->addApplet("DMs", new InkHUD::DMApplet);                                 // -
+    inkhud->addApplet("Channel 0", new InkHUD::ThreadedMessageApplet(0));           // -
+    inkhud->addApplet("Channel 1", new InkHUD::ThreadedMessageApplet(1));           // -
+    inkhud->addApplet("Positions", new InkHUD::PositionsApplet, true);              // Activated
+    inkhud->addApplet("Recents List", new InkHUD::RecentsListApplet);               // -
+    inkhud->addApplet("Heard", new InkHUD::HeardApplet, true, false, 1);            // Activated, no autoshow, default on tile 0
 
     //  Start running InkHUD
     inkhud->begin();
@@ -75,16 +77,42 @@ void setupNicheGraphics()
     //  Buttons
     //  --------------------------
 
-    Inputs::TwoButton *buttons = Inputs::TwoButton::getInstance(); // Shared NicheGraphics component
+    /* Not yet configured
 
-    // #0: Main User Button
-    buttons->setWiring(0, Inputs::TwoButton::getUserButtonPin());
-    buttons->setTiming(0, 75, 500);
-    buttons->setHandlerShortPress(0, [inkhud]() { inkhud->shortpress(); });
-    buttons->setHandlerLongPress(0, [inkhud]() { inkhud->longpress(); });
+        Inputs::TwoButton *buttons = Inputs::TwoButton::getInstance(); // Shared NicheGraphics component
 
-    // Begin handling button events
-    buttons->start();
+        // #0: Main User Button
+        buttons->setWiring(0, Inputs::TwoButton::getUserButtonPin());
+        buttons->setTiming(0, 75, 500);
+        buttons->setHandlerShortPress(0, [inkhud]() { inkhud->shortpress(); });
+        buttons->setHandlerLongPress(0, [inkhud]() { inkhud->longpress(); });
+
+        // Begin handling button events
+        buttons->start();
+
+    */
+
+    // Joystick
+    // ---------
+
+    using Inputs::GPIOJoystick;
+    GPIOJoystick *joystick = GPIOJoystick::getInstance(); // Share NicheGraphics component
+
+    joystick->setWiringType(GPIOJoystick::WiringType::ACTIVE_LOW);
+
+    joystick->setPin(GPIOJoystick::Direction::UP, TB_UP);
+    joystick->setPin(GPIOJoystick::Direction::RIGHT, TB_RIGHT);
+    joystick->setPin(GPIOJoystick::Direction::DOWN, TB_DOWN);
+    joystick->setPin(GPIOJoystick::Direction::LEFT, TB_LEFT);
+    joystick->setPin(GPIOJoystick::Direction::CENTER, TB_PRESS);
+
+    joystick->setHandler(GPIOJoystick::Direction::UP, [inkhud]() { inkhud->joystickUp(); });
+    joystick->setHandler(GPIOJoystick::Direction::RIGHT, [inkhud]() { inkhud->joystickRight(); });
+    joystick->setHandler(GPIOJoystick::Direction::DOWN, [inkhud]() { inkhud->joystickDown(); });
+    joystick->setHandler(GPIOJoystick::Direction::LEFT, [inkhud]() { inkhud->joystickLeft(); });
+    joystick->setHandler(GPIOJoystick::Direction::CENTER, [inkhud]() { inkhud->joystickCenter(); });
+
+    joystick->start();
 }
 
 #endif

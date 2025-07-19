@@ -175,7 +175,12 @@ static const uint8_t SCL = PIN_WIRE_SCL;
 //  joystick
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-#define CANNED_MESSAGE_MODULE_ENABLE 1
+// trackball
+#define TB_UP 25
+#define TB_DOWN 26
+#define TB_LEFT 27
+#define TB_RIGHT 28
+#define TB_PRESS 29
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  Compatibility Definitions

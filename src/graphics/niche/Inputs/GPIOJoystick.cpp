@@ -65,20 +65,27 @@ void GPIOJoystick::start()
 {
     assert(wiring != WiringType::UNSET);
 
+    // Decide whether a rising or falling edge indicates button press
+    uint32_t edge;
+    if (wiring == WiringType::ACTIVE_HIGH || wiring == WiringType::ACTIVE_HIGH_PULLDOWN)
+        edge = RISING;
+    else
+        edge = FALLING;
+
     if (pins[Direction::UP] != 0xFF)
-        attachInterrupt(pins[Direction::UP], GPIOJoystick::isrUP, CHANGE);
+        attachInterrupt(pins[Direction::UP], GPIOJoystick::isrUP, edge);
 
     if (pins[Direction::RIGHT] != 0xFF)
-        attachInterrupt(pins[Direction::RIGHT], GPIOJoystick::isrRIGHT, CHANGE);
+        attachInterrupt(pins[Direction::RIGHT], GPIOJoystick::isrRIGHT, edge);
 
     if (pins[Direction::DOWN] != 0xFF)
-        attachInterrupt(pins[Direction::DOWN], GPIOJoystick::isrDOWN, CHANGE);
+        attachInterrupt(pins[Direction::DOWN], GPIOJoystick::isrDOWN, edge);
 
     if (pins[Direction::LEFT] != 0xFF)
-        attachInterrupt(pins[Direction::LEFT], GPIOJoystick::isrLEFT, CHANGE);
+        attachInterrupt(pins[Direction::LEFT], GPIOJoystick::isrLEFT, edge);
 
     if (pins[Direction::CENTER] != 0xFF)
-        attachInterrupt(pins[Direction::CENTER], GPIOJoystick::isrCENTER, CHANGE);
+        attachInterrupt(pins[Direction::CENTER], GPIOJoystick::isrCENTER, edge);
 }
 
 // Stop receiving input
@@ -101,48 +108,46 @@ void GPIOJoystick::stop()
         detachInterrupt(pins[Direction::CENTER]);
 }
 
-// Called by the pins' interrupt methods
-// Pins use CHANGE interrupts. This method reads pin to detect whether CHANGE was RISING or FALLING.
-// This method is also responsible for debouncing
-void GPIOJoystick::handlePinChange(Direction direction)
+// Called from a pin's interrupt, when a new press is detected
+// Starts the timer thread, which will poll for pin's release
+void GPIOJoystick::handlePressBegin(Direction direction)
 {
-    // Time (in milliseconds) when *any* button was pressed
-    // For debouncing only
-    static uint32_t pressedAtMs = 0;
+    // Ignore if still polling for a previous release.
+    // Prevents button bounces during release, which would otherwise reset pressedAtMs
+    if (OSThread::enabled)
+        return;
 
-    // Decide whether pin was just pressed or just released
-    bool pressed;
-    if (wiring == WiringType::ACTIVE_HIGH || wiring == WiringType::ACTIVE_HIGH_PULLDOWN)
-        pressed = (digitalRead(pins[direction]) == HIGH);
-    else
-        pressed = (digitalRead(pins[direction]) == LOW);
-
-    // Handle press
-    if (pressed) {
-        pressedAtMs = millis();
-    }
-
-    // Handle release
-    else {
-        // Debounce
-        if (millis() - pressedAtMs > debounceMs) {
-            // Have our thread execute the callback ASAP, at next loop()
-            // Avoids running the callback inside the ISR
-            pendingCallback = direction;
-            OSThread::setIntervalFromNow(0);
-            OSThread::enabled = true;
-            runASAP = true;
-        }
-    }
+    pressedAtMs = millis();           // For debouncing
+    pressedDirection = direction;     // Store for use by runOnce
+    OSThread::setIntervalFromNow(10); // Poll every 10ms for release
+    OSThread::enabled = true;
+    runASAP = true;
 }
 
 // Timer method
-// When joystick input occurs, the ISR schedules this method, so it can execute our callback at next loop()
-// Allows us to avoid running callbacks inside an ISR
+// Enabled by a pin's ISR when press starts
+// Polls for release, and executes callback if held for longer than the debounce threshold
 int32_t GPIOJoystick::runOnce()
 {
-    callbacks[pendingCallback](); // Execute callback which was scheduled by an ISRs
-    return OSThread::disable();   // Handled. Stop thread
+    // Check if the button is still pressed
+    bool isPressed;
+    if (wiring == WiringType::ACTIVE_HIGH || wiring == WiringType::ACTIVE_HIGH_PULLDOWN)
+        isPressed = (digitalRead(pins[pressedDirection]) == HIGH);
+    else
+        isPressed = (digitalRead(pins[pressedDirection]) == LOW);
+
+    // If still pressed, check again in a few milliseconds
+    if (isPressed)
+        return OSThread::interval;
+
+    // Otherwise, released now
+
+    // If press was longer than the debounce threshold, execute the callback
+    uint32_t duration = millis() - pressedAtMs;
+    if (duration > debounceMs)
+        callbacks[pressedDirection]();
+
+    return OSThread::disable(); // Handled. Stop thread
 }
 
 #ifdef ARCH_ESP32

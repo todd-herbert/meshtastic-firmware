@@ -40,7 +40,7 @@ class GPIOJoystick : private concurrency::OSThread
     void setPin(Direction direction, uint8_t pin);          // Set GPIO pin for each direction
     void setHandler(Direction direction, Callback onPress); // Set what code to run when input occurs
 
-    void handlePinChange(Direction direction); // Schedule an input event to be handled shortly, outside the ISRs
+    void handlePressBegin(Direction direction); // Called by ISR when press begins. Starts the polling for button release.
 
     // Disconnect and reconnect interrupts for light sleep
 #ifdef ARCH_ESP32
@@ -53,11 +53,11 @@ class GPIOJoystick : private concurrency::OSThread
     static void noop() {};
 
     // Need to hard-code an ISR for each GPIO of the joystick
-    static void isrUP() { getInstance()->handlePinChange(UP); }
-    static void isrRIGHT() { getInstance()->handlePinChange(RIGHT); }
-    static void isrDOWN() { getInstance()->handlePinChange(DOWN); }
-    static void isrLEFT() { getInstance()->handlePinChange(LEFT); }
-    static void isrCENTER() { getInstance()->handlePinChange(CENTER); }
+    static void isrUP() { getInstance()->handlePressBegin(UP); }
+    static void isrRIGHT() { getInstance()->handlePressBegin(RIGHT); }
+    static void isrDOWN() { getInstance()->handlePressBegin(DOWN); }
+    static void isrLEFT() { getInstance()->handlePressBegin(LEFT); }
+    static void isrCENTER() { getInstance()->handlePressBegin(CENTER); }
 
     int32_t runOnce() override; // Timer method. Executes callbacks outside of the ISRs
 
@@ -66,7 +66,8 @@ class GPIOJoystick : private concurrency::OSThread
     uint8_t pins[5] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF}; // Size matches GPIOJoystick::Direction enum
     Callback callbacks[5] = {noop, noop, noop, noop, noop};
 
-    Direction pendingCallback; // Callback to be executed. Set from an ISR, actioned by runOnce()
+    Direction pressedDirection; // Set by an ISR when press begins. Used by runOnce, to poll release / run callback
+    uint32_t pressedAtMs;       // For debouncing
 
 #ifdef ARCH_ESP32
     // Get notified when lightsleep begins and ends

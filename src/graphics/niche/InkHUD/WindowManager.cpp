@@ -113,7 +113,8 @@ void InkHUD::WindowManager::openMenu()
 
 // On the currently focussed tile: cycle to the next available user applet
 // Applets available for this must be activated, and not already displayed on another tile
-void InkHUD::WindowManager::nextApplet()
+// If "reverse", method moves to previous applet, instead of next applet. Useful with directional inputs
+void InkHUD::WindowManager::nextApplet(bool reverse)
 {
     Tile *t = userTiles.at(settings->userTiles.focused);
 
@@ -134,10 +135,17 @@ void InkHUD::WindowManager::nextApplet()
     // Confirm that we did find the applet
     assert(appletIndex != (uint8_t)-1);
 
-    // Iterate forward through the WindowManager::applets, looking for the next valid applet
+    // Iterate through the WindowManager::applets, looking for the next valid applet
     Applet *nextValidApplet = nullptr;
     for (uint8_t i = 1; i < inkhud->userApplets.size(); i++) {
-        uint8_t newAppletIndex = (appletIndex + i) % inkhud->userApplets.size();
+        // Either add or subtract iterator, depending on whether we're seeking forwards or backwards
+        // Used for InkHUD::previousApplet
+        uint8_t newAppletIndex;
+        if (!reverse)
+            newAppletIndex = (appletIndex + i) % inkhud->userApplets.size();
+        else
+            newAppletIndex = (appletIndex + inkhud->userApplets.size() - i) % inkhud->userApplets.size();
+
         Applet *a = inkhud->userApplets.at(newAppletIndex);
 
         // Looking for an applet which is active (enabled by user), but currently in background

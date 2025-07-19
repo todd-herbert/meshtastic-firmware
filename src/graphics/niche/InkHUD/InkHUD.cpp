@@ -88,6 +88,13 @@ void InkHUD::InkHUD::nextApplet()
     windowManager->nextApplet();
 }
 
+// Similar to InkHUD::nextApplet, except we iterate backwards through the list of applets
+// Useful for inputs like joystick
+void InkHUD::InkHUD::previousApplet()
+{
+    windowManager->nextApplet(true); // Seek in reverse direction
+}
+
 // Show the menu (on the the focused tile)
 // The applet previously displayed there will be restored once the menu closes
 void InkHUD::InkHUD::openMenu()

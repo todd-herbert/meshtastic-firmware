@@ -61,6 +61,7 @@ class InkHUD
     // - suitable(?) for use by aux button, connected in variant nicheGraphics.h
 
     void nextApplet();
+    void previousApplet(); // Reverse of nextApplet
     void openMenu();
     void nextTile();
     void previousTile(); // Reverse of nextTile

@@ -63,6 +63,7 @@ class InkHUD
     void nextApplet();
     void openMenu();
     void nextTile();
+    void previousTile(); // Reverse of nextTile
     void rotate();
     void toggleBatteryIcon();
 

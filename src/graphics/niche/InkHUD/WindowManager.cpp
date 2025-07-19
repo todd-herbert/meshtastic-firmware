@@ -70,7 +70,9 @@ void InkHUD::WindowManager::begin()
 // Focus on a different tile
 // The "focused tile" is the one which cycles applets on user button press,
 // and the one where the menu will be displayed
-void InkHUD::WindowManager::nextTile()
+// If "reverse", method move to previous tile, instead of next tile.
+// (Reverse is only meaningful in layouts with more than two tiles)
+void InkHUD::WindowManager::nextTile(bool reverse)
 {
     // Close the menu applet if open
     // We don't *really* want to do this, but it simplifies handling *a lot*
@@ -81,8 +83,11 @@ void InkHUD::WindowManager::nextTile()
         menuWasOpen = true;
     }
 
-    // Swap to next tile
-    settings->userTiles.focused = (settings->userTiles.focused + 1) % settings->userTiles.count;
+    // Swap to next tile (or previous, if seeking in reverse)
+    if (!reverse)
+        settings->userTiles.focused = (settings->userTiles.focused + 1) % settings->userTiles.count;
+    else
+        settings->userTiles.focused = (settings->userTiles.focused + settings->userTiles.count - 1) % settings->userTiles.count;
 
     // Make sure that we don't get stuck on the placeholder tile
     refocusTile();

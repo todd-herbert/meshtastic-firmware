@@ -102,6 +102,13 @@ void InkHUD::InkHUD::nextTile()
     windowManager->nextTile();
 }
 
+// Similar to InkHUD::nextTile, except we cycle backwards through the tiles
+// Useful with a joystick. Only noticeable on layouts with more than two tiles.
+void InkHUD::InkHUD::previousTile()
+{
+    windowManager->nextTile(true); // Seek in reverse direction
+}
+
 // Rotate the display image by 90 degrees
 void InkHUD::InkHUD::rotate()
 {

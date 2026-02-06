@@ -27,11 +27,6 @@ class MenuApplet : public SystemApplet, public concurrency::OSThread
     void onBackground() override;
     void onButtonShortPress() override;
     void onButtonLongPress() override;
-    void onExitShort() override;
-    void onNavUp() override;
-    void onNavDown() override;
-    void onNavLeft() override;
-    void onNavRight() override;
     void onRender() override;
 
     void show(Tile *t); // Open the menu, onto a user tile
@@ -57,7 +52,6 @@ class MenuApplet : public SystemApplet, public concurrency::OSThread
     void freeCannedMessageResources();                                      // Clear MenuApplet's canned message processing data
 
     MenuPage currentPage = MenuPage::ROOT;
-    MenuPage previousPage = MenuPage::EXIT;
     uint8_t cursor = 0;       // Which menu item is currently highlighted
     bool cursorShown = false; // Is *any* item highlighted? (Root menu: no initial selection)
 

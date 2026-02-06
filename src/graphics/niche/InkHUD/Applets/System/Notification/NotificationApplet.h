@@ -26,7 +26,7 @@ class NotificationApplet : public SystemApplet
   public:
     NotificationApplet();
 
-    void onRender(bool full) override;
+    void onRender() override;
     void onForeground() override;
     void onBackground() override;
     void onButtonShortPress() override;

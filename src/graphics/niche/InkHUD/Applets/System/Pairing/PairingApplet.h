@@ -22,7 +22,7 @@ class PairingApplet : public SystemApplet
   public:
     PairingApplet();
 
-    void onRender(bool full) override;
+    void onRender() override;
     void onForeground() override;
     void onBackground() override;
 

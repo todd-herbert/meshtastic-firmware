@@ -65,11 +65,10 @@ class Applet : public GFX
 
     // Rendering
 
-    void render(bool full);                       // Draw the applet
+    void render();                                // Draw the applet
     bool wantsToRender();                         // Check whether applet wants to render
     bool wantsToAutoshow();                       // Check whether applet wants to become foreground
     Drivers::EInk::UpdateTypes wantsUpdateType(); // Check which display update type the applet would prefer
-    bool wantsFullRender();                       // Check whether applet wants to render over its previous render
     void updateDimensions();                      // Get current size from tile
     void resetDrawingSpace();                     // Makes sure every render starts with same parameters
 
@@ -84,7 +83,7 @@ class Applet : public GFX
 
     // Event handlers
 
-    virtual void onRender(bool full) = 0; // For drawing the applet
+    virtual void onRender() = 0; // All drawing happens here
     virtual void onActivate() {}
     virtual void onDeactivate() {}
     virtual void onForeground() {}
@@ -101,21 +100,6 @@ class Applet : public GFX
     virtual void onNavDown() {}
     virtual void onNavLeft() {}
     virtual void onNavRight() {}
-    virtual void onFreeText(char c) {}
-    virtual void onFreeTextDone() {}
-    virtual void onFreeTextCancel() {}
-    // List of inputs which can be subscribed to
-    enum InputMask {      // | No Joystick  |     With Joystick     |
-        BUTTON_SHORT = 1, // | Button Click | Joystick Center Click |
-        BUTTON_LONG = 2,  // | Button Hold  | Joystick Center Hold  |
-        EXIT_SHORT = 4,   // | no-op        | Back Button Click     |
-        EXIT_LONG = 8,    // | no-op        | Back Button Hold      |
-        NAV_UP = 16,      // | no-op        | Joystick Up           |
-        NAV_DOWN = 32,    // | no-op        | Joystick Down         |
-        NAV_LEFT = 64,    // | no-op        | Joystick Left         |
-        NAV_RIGHT = 128   // | no-op        | Joystick Right        |
-    };
-    bool isInputSubscribed(InputMask input); // Check if input should be handled by applet, this should not be overloaded.
 
     virtual bool approveNotification(Notification &n); // Allow an applet to veto a notification
 
@@ -128,9 +112,8 @@ class Applet : public GFX
   protected:
     void drawPixel(int16_t x, int16_t y, uint16_t color) override; // Place a single pixel. All drawing output passes through here
 
-    void requestUpdate(EInk::UpdateTypes type = EInk::UpdateTypes::UNSPECIFIED,
-                       bool full = true); // Ask WindowManager to schedule a display update
-    void requestAutoshow();               // Ask for applet to be moved to foreground
+    void requestUpdate(EInk::UpdateTypes type = EInk::UpdateTypes::UNSPECIFIED); // Ask WindowManager to schedule a display update
+    void requestAutoshow();                                                      // Ask for applet to be moved to foreground
 
     uint16_t X(float f);                                                      // Map applet width, mapped from 0 to 1.0
     uint16_t Y(float f);                                                      // Map applet height, mapped from 0 to 1.0
@@ -193,7 +176,6 @@ class Applet : public GFX
     bool wantAutoshow = false; // Does the applet have new data it would like to display in foreground?
     NicheGraphics::Drivers::EInk::UpdateTypes wantUpdateType =
         NicheGraphics::Drivers::EInk::UpdateTypes::UNSPECIFIED; // Which update method we'd prefer when redrawing the display
-    bool wantFullRender = true;                                 // Render with a fresh canvas
 
     using GFX::setFont;     // Make sure derived classes use AppletFont instead of AdafruitGFX fonts directly
     using GFX::setRotation; // Block setRotation calls. Rotation is handled globally by WindowManager.

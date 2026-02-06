@@ -28,12 +28,8 @@ class WindowManager
     // - call these to make stuff change
 
     void nextTile();
-    void prevTile();
-    Applet *getActiveApplet();
     void openMenu();
-    void openAlignStick();
     void nextApplet();
-    void prevApplet();
     void rotate();
     void toggleBatteryIcon();
 

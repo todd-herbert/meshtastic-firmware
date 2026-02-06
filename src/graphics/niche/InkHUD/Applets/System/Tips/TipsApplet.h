@@ -23,7 +23,6 @@ class TipsApplet : public SystemApplet
     enum class Tip {
         WELCOME,
         FINISH_SETUP,
-        PICK_REGION,
         SAFE_SHUTDOWN,
         CUSTOMIZATION,
         BUTTONS,

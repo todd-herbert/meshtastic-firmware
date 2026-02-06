@@ -47,7 +47,6 @@ class InkHUD
     void setDriver(Drivers::EInk *driver);
     void setDisplayResilience(uint8_t fastPerFull = 5, float stressMultiplier = 2.0);
     void addApplet(const char *name, Applet *a, bool defaultActive = false, bool defaultAutoshow = false, uint8_t onTile = -1);
-    void notifyApplyingChanges();
 
     void begin();
 
@@ -77,12 +76,6 @@ class InkHUD
     void rotate();
     void rotateJoystick(uint8_t angle = 1); // rotate 90 deg by default
     void toggleBatteryIcon();
-
-    // Used by TipsApplet to force menu to start on Region selection
-    bool forceRegionMenu = false;
-
-    // Input mode hint for devices that use a left/right rocker plus center button
-    bool twoWayRocker = false;
 
     // Updating the display
     // - called by various InkHUD components

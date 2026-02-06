@@ -88,14 +88,8 @@ class Applet : public GFX
     virtual void onForeground() {}
     virtual void onBackground() {}
     virtual void onShutdown() {}
-    virtual void onButtonShortPress() {}
-    virtual void onButtonLongPress() {}
-    virtual void onExitShort() {}
-    virtual void onExitLong() {}
-    virtual void onNavUp() {}
-    virtual void onNavDown() {}
-    virtual void onNavLeft() {}
-    virtual void onNavRight() {}
+    virtual void onButtonShortPress() {} // (System Applets only)
+    virtual void onButtonLongPress() {}  // (System Applets only)
 
     virtual bool approveNotification(Notification &n); // Allow an applet to veto a notification
 

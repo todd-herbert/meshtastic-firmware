@@ -93,7 +93,7 @@ void setupNicheGraphics()
 
     // #0: Main User Button
     // Labeled "Page Turn Button" by manual
-    buttons->setWiring(0, PIN_BUTTON2);
+    buttons->setWiring(0, PIN_BUTTON1);
     buttons->setTiming(0, 50, 500); // Todo: confirm 50ms is adequate debounce
     buttons->setHandlerShortPress(0, [inkhud]() { inkhud->shortpress(); });
     buttons->setHandlerLongPress(0, [inkhud]() { inkhud->longpress(); });
@@ -101,7 +101,7 @@ void setupNicheGraphics()
     // #1: Aux Button
     // Labeled "Function Button" by manual
     // Todo: additional features
-    buttons->setWiring(1, PIN_BUTTON1);
+    buttons->setWiring(1, PIN_BUTTON2);
     buttons->setTiming(1, 50, 500); // 500ms before latch
     buttons->setHandlerDown(1, [backlight]() { backlight->peek(); });
     buttons->setHandlerLongPress(1, [backlight]() {

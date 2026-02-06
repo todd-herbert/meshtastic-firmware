@@ -37,8 +37,8 @@ class Renderer : protected concurrency::OSThread
 
     // Call these to make the image change
 
-    void requestUpdate(bool all = false); // Update display, if a foreground applet has info it wants to show
-    void forceUpdate(Drivers::EInk::UpdateTypes type = Drivers::EInk::UpdateTypes::UNSPECIFIED, bool all = false,
+    void requestUpdate(); // Update display, if a foreground applet has info it wants to show
+    void forceUpdate(Drivers::EInk::UpdateTypes type = Drivers::EInk::UpdateTypes::UNSPECIFIED,
                      bool async = true); // Update display, regardless of whether any applets requested this
 
     // Wait for an update to complete
@@ -65,7 +65,6 @@ class Renderer : protected concurrency::OSThread
     // Steps of the rendering process
 
     void clearBuffer();
-    void clearTile(Tile *t);
     void checkLocks();
     bool shouldUpdate();
     Drivers::EInk::UpdateTypes decideUpdateType();
@@ -86,7 +85,6 @@ class Renderer : protected concurrency::OSThread
 
     bool requested = false;
     bool forced = false;
-    bool renderAll = false;
 
     // For convenience
     InkHUD *inkhud = nullptr;

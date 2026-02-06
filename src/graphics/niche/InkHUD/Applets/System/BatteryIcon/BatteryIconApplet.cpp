@@ -6,8 +6,6 @@ using namespace NicheGraphics;
 
 InkHUD::BatteryIconApplet::BatteryIconApplet()
 {
-    alwaysRender = true; // render everytime the screen is updated
-
     // Show at boot, if user has previously enabled the feature
     if (settings->optionalFeatures.batteryIcon)
         bringToForeground();
@@ -46,7 +44,7 @@ int InkHUD::BatteryIconApplet::onPowerStatusUpdate(const meshtastic::Status *sta
     return 0; // Tell Observable to continue informing other observers
 }
 
-void InkHUD::BatteryIconApplet::onRender(bool full)
+void InkHUD::BatteryIconApplet::onRender()
 {
     // Clear the region beneath the tile, including the border
     // Most applets are drawing onto an empty frame buffer and don't need to do this

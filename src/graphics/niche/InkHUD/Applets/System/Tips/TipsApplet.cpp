@@ -45,7 +45,7 @@ InkHUD::TipsApplet::TipsApplet()
         bringToForeground();
 }
 
-void InkHUD::TipsApplet::onRender(bool full)
+void InkHUD::TipsApplet::onRender()
 {
     switch (tipQueue.front()) {
     case Tip::WELCOME:
@@ -261,7 +261,7 @@ void InkHUD::TipsApplet::onBackground()
 
     // Need to force an update, as a polite request wouldn't be honored, seeing how we are now in the background
     // Usually, onBackground is followed by another applet's onForeground (which requests update), but not in this case
-    inkhud->forceUpdate(EInk::UpdateTypes::FULL, true);
+    inkhud->forceUpdate(EInk::UpdateTypes::FULL);
 }
 
 // While our SystemApplet::handleInput flag is true
@@ -292,8 +292,9 @@ void InkHUD::TipsApplet::onButtonShortPress()
             inkhud->persistence->saveSettings();
         }
 
-        // Close applet
+        // Close applet and clean the screen
         sendToBackground();
+        inkhud->forceUpdate(EInk::UpdateTypes::FULL);
     } else {
         requestUpdate();
     }

@@ -36,7 +36,7 @@ class ThreadedMessageApplet : public Applet, public SinglePortModule
     explicit ThreadedMessageApplet(uint8_t channelIndex);
     ThreadedMessageApplet() = delete;
 
-    void onRender(bool full) override;
+    void onRender() override;
 
     void onActivate() override;
     void onDeactivate() override;

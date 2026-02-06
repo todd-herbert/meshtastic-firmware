@@ -34,7 +34,7 @@ int InkHUD::AllMessageApplet::onReceiveTextMessage(const meshtastic_MeshPacket *
     return 0;
 }
 
-void InkHUD::AllMessageApplet::onRender(bool full)
+void InkHUD::AllMessageApplet::onRender()
 {
     // Find newest message, regardless of whether DM or broadcast
     MessageStore::Message *message;

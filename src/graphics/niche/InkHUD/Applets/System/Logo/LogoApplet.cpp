@@ -30,7 +30,7 @@ InkHUD::LogoApplet::LogoApplet() : concurrency::OSThread("LogoApplet")
     // This is then drawn with a FULL refresh by Renderer::begin
 }
 
-void InkHUD::LogoApplet::onRender(bool full)
+void InkHUD::LogoApplet::onRender()
 {
     // Size  of the region which the logo should "scale to fit"
     uint16_t logoWLimit = X(0.8);
@@ -120,7 +120,7 @@ void InkHUD::LogoApplet::onBackground()
 
     // Need to force an update, as a polite request wouldn't be honored, seeing how we are now in the background
     // Usually, onBackground is followed by another applet's onForeground (which requests update), but not in this case
-    inkhud->forceUpdate(EInk::UpdateTypes::FULL, true);
+    inkhud->forceUpdate(EInk::UpdateTypes::FULL);
 }
 
 // Begin displaying the screen which is shown at shutdown
@@ -138,10 +138,10 @@ void InkHUD::LogoApplet::onShutdown()
     // Intention is to restore display health.
 
     inverted = true;
-    inkhud->forceUpdate(Drivers::EInk::FULL, true, false);
+    inkhud->forceUpdate(Drivers::EInk::FULL, false);
     delay(1000); // Cooldown. Back to back updates aren't great for health.
     inverted = false;
-    inkhud->forceUpdate(Drivers::EInk::FULL, true, false);
+    inkhud->forceUpdate(Drivers::EInk::FULL, false);
     delay(1000); // Cooldown
 
     // Prepare for the powered-off screen now
@@ -176,7 +176,7 @@ void InkHUD::LogoApplet::onReboot()
     textTitle = "Rebooting...";
     fontTitle = fontSmall;
 
-    inkhud->forceUpdate(Drivers::EInk::FULL, true, false);
+    inkhud->forceUpdate(Drivers::EInk::FULL, false);
     // Perform the update right now, waiting here until complete
 }
 

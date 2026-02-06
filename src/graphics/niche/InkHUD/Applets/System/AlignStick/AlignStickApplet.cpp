@@ -10,7 +10,7 @@ InkHUD::AlignStickApplet::AlignStickApplet()
         bringToForeground();
 }
 
-void InkHUD::AlignStickApplet::onRender(bool full)
+void InkHUD::AlignStickApplet::onRender()
 {
     setFont(fontMedium);
     printAt(0, 0, "Align Joystick:");
@@ -152,17 +152,19 @@ void InkHUD::AlignStickApplet::onBackground()
 
     // Need to force an update, as a polite request wouldn't be honored, seeing how we are now in the background
     // Usually, onBackground is followed by another applet's onForeground (which requests update), but not in this case
-    inkhud->forceUpdate(EInk::UpdateTypes::FULL, true);
+    inkhud->forceUpdate(EInk::UpdateTypes::FULL);
 }
 
 void InkHUD::AlignStickApplet::onButtonLongPress()
 {
     sendToBackground();
+    inkhud->forceUpdate(EInk::UpdateTypes::FULL);
 }
 
 void InkHUD::AlignStickApplet::onExitLong()
 {
     sendToBackground();
+    inkhud->forceUpdate(EInk::UpdateTypes::FULL);
 }
 
 void InkHUD::AlignStickApplet::onNavUp()
@@ -170,6 +172,7 @@ void InkHUD::AlignStickApplet::onNavUp()
     settings->joystick.aligned = true;
 
     sendToBackground();
+    inkhud->forceUpdate(EInk::UpdateTypes::FULL);
 }
 
 void InkHUD::AlignStickApplet::onNavDown()
@@ -178,6 +181,7 @@ void InkHUD::AlignStickApplet::onNavDown()
     settings->joystick.aligned = true;
 
     sendToBackground();
+    inkhud->forceUpdate(EInk::UpdateTypes::FULL);
 }
 
 void InkHUD::AlignStickApplet::onNavLeft()
@@ -186,6 +190,7 @@ void InkHUD::AlignStickApplet::onNavLeft()
     settings->joystick.aligned = true;
 
     sendToBackground();
+    inkhud->forceUpdate(EInk::UpdateTypes::FULL);
 }
 
 void InkHUD::AlignStickApplet::onNavRight()
@@ -194,6 +199,7 @@ void InkHUD::AlignStickApplet::onNavRight()
     settings->joystick.aligned = true;
 
     sendToBackground();
+    inkhud->forceUpdate(EInk::UpdateTypes::FULL);
 }
 
 #endif

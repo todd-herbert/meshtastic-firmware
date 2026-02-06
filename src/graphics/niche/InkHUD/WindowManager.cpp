@@ -4,7 +4,6 @@
 
 #include "./Applets/System/AlignStick/AlignStickApplet.h"
 #include "./Applets/System/BatteryIcon/BatteryIconApplet.h"
-#include "./Applets/System/Keyboard/KeyboardApplet.h"
 #include "./Applets/System/Logo/LogoApplet.h"
 #include "./Applets/System/Menu/MenuApplet.h"
 #include "./Applets/System/Notification/NotificationApplet.h"
@@ -149,34 +148,6 @@ void InkHUD::WindowManager::openAlignStick()
     }
 }
 
-void InkHUD::WindowManager::openKeyboard()
-{
-    if (!settings->joystick.enabled || inkhud->twoWayRocker)
-        return;
-
-    KeyboardApplet *keyboard = (KeyboardApplet *)inkhud->getSystemApplet("Keyboard");
-
-    if (keyboard) {
-        keyboard->bringToForeground();
-        keyboardOpen = true;
-        changeLayout();
-    }
-}
-
-void InkHUD::WindowManager::closeKeyboard()
-{
-    if (!settings->joystick.enabled || inkhud->twoWayRocker)
-        return;
-
-    KeyboardApplet *keyboard = (KeyboardApplet *)inkhud->getSystemApplet("Keyboard");
-
-    if (keyboard) {
-        keyboard->sendToBackground();
-        keyboardOpen = false;
-        changeLayout();
-    }
-}
-
 // On the currently focussed tile: cycle to the next available user applet
 // Applets available for this must be activated, and not already displayed on another tile
 void InkHUD::WindowManager::nextApplet()
@@ -307,6 +278,7 @@ void InkHUD::WindowManager::toggleBatteryIcon()
         batteryIcon->sendToBackground();
 
     // Force-render
+    // - redraw all applets
     inkhud->forceUpdate(EInk::UpdateTypes::FAST);
 }
 
@@ -345,25 +317,9 @@ void InkHUD::WindowManager::changeLayout()
         menu->show(ft);
     }
 
-    // Resize for the on-screen keyboard
-    if (keyboardOpen) {
-        // Send all user applets to the background
-        // User applets currently don't handle free text input
-        for (uint8_t i = 0; i < inkhud->userApplets.size(); i++)
-            inkhud->userApplets.at(i)->sendToBackground();
-        // Find the first system applet that can handle freetext and resize it
-        for (SystemApplet *sa : inkhud->systemApplets) {
-            if (sa->handleFreeText) {
-                const uint16_t keyboardHeight = KeyboardApplet::getKeyboardHeight();
-                sa->getTile()->setRegion(0, 0, inkhud->width(), inkhud->height() - keyboardHeight - 1);
-                break;
-            }
-        }
-    }
-
     // Force-render
     // - redraw all applets
-    inkhud->forceUpdate(EInk::UpdateTypes::FAST, true);
+    inkhud->forceUpdate(EInk::UpdateTypes::FAST);
 }
 
 // Perform necessary reconfiguration when user activates or deactivates applets at run-time
@@ -397,7 +353,7 @@ void InkHUD::WindowManager::changeActivatedApplets()
 
     // Force-render
     // - redraw all applets
-    inkhud->forceUpdate(EInk::UpdateTypes::FAST, true);
+    inkhud->forceUpdate(EInk::UpdateTypes::FAST);
 }
 
 // Some applets may be permitted to bring themselves to foreground, to show new data
@@ -483,10 +439,8 @@ void InkHUD::WindowManager::createSystemApplets()
     addSystemApplet("Logo", new LogoApplet, new Tile);
     addSystemApplet("Pairing", new PairingApplet, new Tile);
     addSystemApplet("Tips", new TipsApplet, new Tile);
-    if (settings->joystick.enabled && !inkhud->twoWayRocker) {
+    if (settings->joystick.enabled)
         addSystemApplet("AlignStick", new AlignStickApplet, new Tile);
-        addSystemApplet("Keyboard", new KeyboardApplet, new Tile);
-    }
 
     addSystemApplet("Menu", new MenuApplet, nullptr);
 
@@ -509,13 +463,9 @@ void InkHUD::WindowManager::placeSystemTiles()
     inkhud->getSystemApplet("Logo")->getTile()->setRegion(0, 0, inkhud->width(), inkhud->height());
     inkhud->getSystemApplet("Pairing")->getTile()->setRegion(0, 0, inkhud->width(), inkhud->height());
     inkhud->getSystemApplet("Tips")->getTile()->setRegion(0, 0, inkhud->width(), inkhud->height());
-    if (settings->joystick.enabled && !inkhud->twoWayRocker) {
+    if (settings->joystick.enabled)
         inkhud->getSystemApplet("AlignStick")->getTile()->setRegion(0, 0, inkhud->width(), inkhud->height());
-        const uint16_t keyboardHeight = KeyboardApplet::getKeyboardHeight();
-        inkhud->getSystemApplet("Keyboard")
-            ->getTile()
-            ->setRegion(0, inkhud->height() - keyboardHeight, inkhud->width(), keyboardHeight);
-    }
+
     inkhud->getSystemApplet("Notification")->getTile()->setRegion(0, 0, inkhud->width(), 20);
 
     const uint16_t batteryIconHeight = Applet::getHeaderHeight() - 2 - 2;

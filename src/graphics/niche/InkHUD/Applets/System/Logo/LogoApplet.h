@@ -21,7 +21,7 @@ class LogoApplet : public SystemApplet, public concurrency::OSThread
 {
   public:
     LogoApplet();
-    void onRender(bool full) override;
+    void onRender() override;
     void onForeground() override;
     void onBackground() override;
     void onShutdown() override;

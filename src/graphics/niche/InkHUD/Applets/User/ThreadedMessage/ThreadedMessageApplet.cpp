@@ -22,7 +22,7 @@ InkHUD::ThreadedMessageApplet::ThreadedMessageApplet(uint8_t channelIndex)
     store = new MessageStore("ch" + to_string(channelIndex));
 }
 
-void InkHUD::ThreadedMessageApplet::onRender(bool full)
+void InkHUD::ThreadedMessageApplet::onRender()
 {
     // =============
     // Draw a header

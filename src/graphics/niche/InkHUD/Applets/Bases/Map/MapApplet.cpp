@@ -4,7 +4,7 @@
 
 using namespace NicheGraphics;
 
-void InkHUD::MapApplet::onRender(bool full)
+void InkHUD::MapApplet::onRender()
 {
     // Abort if no markers to render
     if (!enoughMarkers()) {

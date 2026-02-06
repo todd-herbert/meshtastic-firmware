@@ -22,11 +22,9 @@ class SystemApplet : public Applet
   public:
     // System applets have the right to:
 
-    bool handleInput = false;    // - respond to input from the user button
-    bool handleFreeText = false; // - respond to free text input
-    bool lockRendering = false;  // - prevent other applets from being rendered during an update
-    bool lockRequests = false;   // - prevent other applets from triggering display updates
-    bool alwaysRender = false;   // - render every time the screen is updated
+    bool handleInput = false;   // - respond to input from the user button
+    bool lockRendering = false; // - prevent other applets from being rendered during an update
+    bool lockRequests = false;  // - prevent other applets from triggering display updates
 
     virtual void onReboot() { onShutdown(); } // - handle reboot specially
     virtual void onApplyingChanges() {}

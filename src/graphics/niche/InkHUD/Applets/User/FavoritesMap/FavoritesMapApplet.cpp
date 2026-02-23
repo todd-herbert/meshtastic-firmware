@@ -11,7 +11,7 @@ bool InkHUD::FavoritesMapApplet::shouldDrawNode(meshtastic_NodeInfoLite *node)
     return node && (node->num == nodeDB->getNodeNum() || node->is_favorite);
 }
 
-void InkHUD::FavoritesMapApplet::onRender(bool full)
+void InkHUD::FavoritesMapApplet::onRender()
 {
     // Custom empty state text for favorites-only map.
     if (!enoughMarkers()) {
@@ -21,7 +21,7 @@ void InkHUD::FavoritesMapApplet::onRender(bool full)
     }
 
     // Draw the usual map applet first.
-    MapApplet::onRender(full);
+    MapApplet::onRender();
 
     // Draw our latest "node of interest" as a special marker.
     meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(lastFrom);

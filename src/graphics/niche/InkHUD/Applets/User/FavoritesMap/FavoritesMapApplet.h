@@ -24,7 +24,7 @@ class FavoritesMapApplet : public MapApplet, public SinglePortModule
 {
   public:
     FavoritesMapApplet() : SinglePortModule("FavoritesMapApplet", meshtastic_PortNum_POSITION_APP) {}
-    void onRender(bool full) override;
+    void onRender() override;
 
   protected:
     bool shouldDrawNode(meshtastic_NodeInfoLite *node) override;

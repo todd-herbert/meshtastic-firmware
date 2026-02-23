@@ -584,7 +584,7 @@ void InkHUD::MenuApplet::populateRecipientPage()
 
     for (uint8_t i = 0; i < MAX_NUM_CHANNELS; i++) {
         // Get the channel, and check if it's enabled
-        meshtastic_Channel &channel = channels.getByIndex(i);
+        const meshtastic_Channel &channel = channels.getByIndex(i);
         if (!channel.has_settings || channel.role == meshtastic_Channel_Role_DISABLED)
             continue;
 

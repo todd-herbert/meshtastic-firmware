@@ -110,13 +110,6 @@ class Applet : public GFX
     void setCrop(int16_t left, int16_t top, uint16_t width, uint16_t height); // Ignore pixels drawn outside a certain region
     void resetCrop();                                                         // Removes setCrop()
 
-    // User Input Handling
-
-    uint8_t subscribedInputs = 0b00000000; // Maybe uint16_t for futureproofing? other devices may need more inputs
-    void setInputsSubscribed(uint8_t input,
-                             bool captured); // Set if an input should be handled by applet or not, this should not be
-                                             // overloaded. Can take multiple inputs at once if you OR/`|` them together
-
     // Text
 
     void setFont(AppletFont f);

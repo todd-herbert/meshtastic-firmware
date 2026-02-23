@@ -79,14 +79,8 @@ void InkHUD::Events::onButtonLong()
     // If no system applet is handling input, default behavior instead is to open the menu
     if (consumer)
         consumer->onButtonLongPress();
-    else {
-        Applet *userConsumer = inkhud->getActiveApplet();
-
-        if (userConsumer != nullptr && userConsumer->isInputSubscribed(Applet::BUTTON_LONG))
-            userConsumer->onButtonLongPress();
-        else
-            inkhud->openMenu();
-    }
+    else
+        inkhud->openMenu();
 }
 
 // Callback for deepSleepObserver

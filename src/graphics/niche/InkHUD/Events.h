@@ -30,11 +30,14 @@ class Events
     void onButtonShort(); // User button: short press
     void onButtonLong();  // User button: long press
 
-    void onJoystickUp();
-    void onJoystickDown();
-    void onJoystickLeft();
-    void onJoystickRight();
-    void onJoystickCenter();
+    enum class JoystickInput {
+        UP = 0,
+        RIGHT = 1,
+        DOWN = 2,
+        LEFT = 3,
+        CENTER = 4,
+    };
+    void onJoystick(JoystickInput direction, bool relative = false); // Input from a 4-direction "joystick style" input device
 
     int beforeDeepSleep(void *unused);                             // Prepare for shutdown
     int beforeReboot(void *unused);                                // Prepare for reboot

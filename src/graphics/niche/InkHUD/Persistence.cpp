@@ -7,14 +7,15 @@ using namespace NicheGraphics;
 // Load settings and latestMessage data
 void InkHUD::Persistence::loadSettings()
 {
+    // A copy of the defaults set in nicheGraphics.h
+    defaultSettings = settings;
+
     // Load the InkHUD settings from flash, and check version number
-    // We should only consider the version number if the InkHUD flashdata component reports that we *did* actually load flash data
-    Settings loadedSettings;
-    bool loadSucceeded = FlashData<Settings>::load(&loadedSettings, "settings");
-    if (loadSucceeded && loadedSettings.meta.version == SETTINGS_VERSION && loadedSettings.meta.version != 0)
-        settings = loadedSettings; // Version matched, replace the defaults with the loaded values
-    else
+    bool loadSucceeded = FlashData<Settings>::load(&settings, "settings");
+    if (!loadSucceeded || settings.meta.version != SETTINGS_VERSION || settings.meta.version == 0) {
         LOG_WARN("Settings version changed. Using defaults");
+        settings = defaultSettings;
+    }
 }
 
 // Load settings and latestMessage data

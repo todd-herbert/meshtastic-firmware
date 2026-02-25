@@ -65,6 +65,11 @@ class InkHUD
     void joystickRight();
     void joystickCenter(); // "OK", "Select"
 
+    void joystickRelativeUp();    // Towards top of rotated display
+    void joystickRelativeDown();  // Towards bottom of rotated display
+    void joystickRelativeLeft();  // Towards left of rotated display
+    void joystickRelativeRight(); // Towards right of rotated display
+
     // Trigger UI changes
     // - called by various InkHUD components
     // - suitable(?) for use by aux button, connected in variant nicheGraphics.h
@@ -95,6 +100,7 @@ class InkHUD
     uint16_t width();                    // From E-Ink driver
     uint16_t height();                   // From E-Ink driver
     std::vector<Tile *> getEmptyTiles(); // From WindowManager
+    uint8_t userRotation();              // From WindowManager
 
     // Applets
 

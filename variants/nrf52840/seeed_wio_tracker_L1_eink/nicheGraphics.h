@@ -11,9 +11,9 @@
 // Applets
 #include "graphics/niche/InkHUD/Applets/User/AllMessage/AllMessageApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/DM/DMApplet.h"
+#include "graphics/niche/InkHUD/Applets/User/FavoritesMap/FavoritesMapApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/Heard/HeardApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/Positions/PositionsApplet.h"
-#include "graphics/niche/InkHUD/Applets/User/FavoritesMap/FavoritesMapApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/RecentsList/RecentsListApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/ThreadedMessage/ThreadedMessageApplet.h"
 
@@ -108,10 +108,10 @@ void setupNicheGraphics()
     joystick->setPin(GPIOJoystick::Direction::LEFT, TB_LEFT);
     joystick->setPin(GPIOJoystick::Direction::CENTER, TB_PRESS);
 
-    joystick->setHandler(GPIOJoystick::Direction::UP, [inkhud]() { inkhud->joystickUp(); });
-    joystick->setHandler(GPIOJoystick::Direction::RIGHT, [inkhud]() { inkhud->joystickRight(); });
-    joystick->setHandler(GPIOJoystick::Direction::DOWN, [inkhud]() { inkhud->joystickDown(); });
-    joystick->setHandler(GPIOJoystick::Direction::LEFT, [inkhud]() { inkhud->joystickLeft(); });
+    joystick->setHandler(GPIOJoystick::Direction::UP, [inkhud]() { inkhud->joystickRelativeUp(); });
+    joystick->setHandler(GPIOJoystick::Direction::RIGHT, [inkhud]() { inkhud->joystickRelativeRight(); });
+    joystick->setHandler(GPIOJoystick::Direction::DOWN, [inkhud]() { inkhud->joystickRelativeDown(); });
+    joystick->setHandler(GPIOJoystick::Direction::LEFT, [inkhud]() { inkhud->joystickRelativeLeft(); });
     joystick->setHandler(GPIOJoystick::Direction::CENTER, [inkhud]() { inkhud->joystickCenter(); });
 
     joystick->start();

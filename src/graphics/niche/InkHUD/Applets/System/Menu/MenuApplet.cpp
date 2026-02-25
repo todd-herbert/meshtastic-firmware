@@ -384,18 +384,19 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         LOG_WARN("Page not implemented");
     }
 
-    // Cursor
+    // Cursor & Page Path
 
     // When opening root menu, move to top of page and hide cursor
     // Hiding is special behavior: allows user to open menu for a quick peek at the clock, and then exit quickly
     if (page == ROOT) {
         cursor = 0;
         cursorShown = false;
+        pagePath.push_back(ROOT);
     }
 
     // If changing pages
     else if (pagePath.back() != page) {
-        cursor = 0; // Move cursor to top of page
+        cursor = 0;               // Move cursor to top of page
         pagePath.push_back(page); // Add new page to the path
     }
 

@@ -124,6 +124,7 @@ class Persistence
     // void printSettings(Settings *settings); // Debugging use only
 
     Settings settings;
+    Settings defaultSettings; // As set in nicheGraphics.h
     LatestMessage latestMessage;
 };
 

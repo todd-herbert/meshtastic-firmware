@@ -72,9 +72,23 @@ void InkHUD::Events::onButtonLong()
         inkhud->openMenu();
 }
 
-void InkHUD::Events::onJoystickUp()
+void InkHUD::Events::onJoystick(JoystickInput direction, bool relative)
 {
-    playChirp();
+    // Rotate joystick directions to match display rotation
+    // Applies in situation where user has physically rotated the device
+    if (relative) {
+        uint8_t &rotDefault = inkhud->persistence->defaultSettings.rotation;
+        uint8_t &rotCurrent = settings->rotation;
+        uint8_t rotDelta = (4 + rotCurrent - rotDefault) % 4;
+
+        direction = static_cast<Events::JoystickInput>((4 + static_cast<uint8_t>(direction) - rotDelta) % 4);
+    }
+
+    // Audio feedback
+    if (direction == Events::JoystickInput::CENTER)
+        playBoop();
+    else
+        playChirp();
 
     // Attempt to dismiss any notifications
     if (dismissExternalNotification())
@@ -83,78 +97,24 @@ void InkHUD::Events::onJoystickUp()
     // Check which system applet wants to handle input (if any)
     SystemApplet *handler = getHandler();
 
-    if (handler)
-        handler->onJoystickUp();
-    else
-        inkhud->previousApplet();
-}
-
-void InkHUD::Events::onJoystickDown()
-{
-    playChirp();
-
-    // Attempt to dismiss any notifications
-    if (dismissExternalNotification())
-        return;
-
-    // Check which system applet wants to handle input (if any)
-    SystemApplet *handler = getHandler();
-
-    if (handler)
-        handler->onJoystickDown();
-    else
-        inkhud->nextApplet();
-}
-
-void InkHUD::Events::onJoystickLeft()
-{
-    playChirp();
-
-    // Attempt to dismiss any notifications
-    if (dismissExternalNotification())
-        return;
-
-    // Check which system applet wants to handle input (if any)
-    SystemApplet *handler = getHandler();
-
-    if (handler)
-        handler->onJoystickLeft();
-    else
-        inkhud->previousTile();
-}
-
-void InkHUD::Events::onJoystickRight()
-{
-    playChirp();
-
-    // Attempt to dismiss any notifications
-    if (dismissExternalNotification())
-        return;
-
-    // Check which system applet wants to handle input (if any)
-    SystemApplet *handler = getHandler();
-
-    if (handler)
-        handler->onJoystickRight();
-    else
-        inkhud->nextTile();
-}
-
-void InkHUD::Events::onJoystickCenter()
-{
-    playBoop();
-
-    // Attempt to dismiss any notifications
-    if (dismissExternalNotification())
-        return;
-
-    // Check which system applet wants to handle input (if any)
-    SystemApplet *handler = getHandler();
-
-    if (handler)
-        handler->onJoystickCenter();
-    else
-        inkhud->openMenu();
+    // Pass off to system applet, or fall back to a default behavior
+    switch (direction) {
+    case Events::JoystickInput::UP:
+        handler ? handler->onJoystickUp() : inkhud->previousApplet();
+        break;
+    case Events::JoystickInput::LEFT:
+        handler ? handler->onJoystickLeft() : inkhud->previousTile();
+        break;
+    case Events::JoystickInput::DOWN:
+        handler ? handler->onJoystickDown() : inkhud->nextApplet();
+        break;
+    case Events::JoystickInput::RIGHT:
+        handler ? handler->onJoystickRight() : inkhud->nextTile();
+        break;
+    case Events::JoystickInput::CENTER:
+        handler ? handler->onJoystickCenter() : inkhud->openMenu();
+        break;
+    }
 }
 
 // Callback for deepSleepObserver
@@ -238,7 +198,8 @@ int InkHUD::Events::onReceiveTextMessage(const meshtastic_MeshPacket *packet)
 
     // Determine whether the message is broadcast or a DM
     // Store this info to prevent confusion after a reboot
-    // Avoids need to compare timestamps, because of situation where "future" messages block newly received, if time not set
+    // Avoids need to compare timestamps, because of situation where "future" messages block newly received, if time
+    // not set
     inkhud->persistence->latestMessage.wasBroadcast = isBroadcast(packet->to);
 
     // Pick the appropriate variable to store the message in
@@ -287,7 +248,8 @@ int InkHUD::Events::onAdminMessage(AdminModule_ObserverData *data)
 #ifdef ARCH_ESP32
 // Callback for lightSleepObserver
 // Make sure the display is not partway through an update when we begin light sleep
-// This is because some displays require active input from us to terminate the update process, and protect the panel hardware
+// This is because some displays require active input from us to terminate the update process, and protect the panel
+// hardware
 int InkHUD::Events::beforeLightSleep(void *unused)
 {
     inkhud->awaitUpdate();

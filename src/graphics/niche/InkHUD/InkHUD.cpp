@@ -84,35 +84,63 @@ void InkHUD::InkHUD::longpress()
 // Should be connected to an input source in nicheGraphics.h
 void InkHUD::InkHUD::joystickUp()
 {
-    events->onJoystickUp();
+    events->onJoystick(Events::JoystickInput::UP);
 }
 
 // Call this when a 4-directional input is moved downwards
 // Should be connected to an input source in nicheGraphics.h
 void InkHUD::InkHUD::joystickDown()
 {
-    events->onJoystickDown();
+    events->onJoystick(Events::JoystickInput::DOWN);
 }
 
 // Call this when a 4-directional input is moved leftwards
 // Should be connected to an input source in nicheGraphics.h
 void InkHUD::InkHUD::joystickLeft()
 {
-    events->onJoystickLeft();
+    events->onJoystick(Events::JoystickInput::LEFT);
 }
 
 // Call this when a 4-directional input is moved rightwards
 // Should be connected to an input source in nicheGraphics.h
 void InkHUD::InkHUD::joystickRight()
 {
-    events->onJoystickRight();
+    events->onJoystick(Events::JoystickInput::RIGHT);
 }
 
 // Call this when the center button of a joystick is pressed down
 // This is specifically the "OK" / "Select" input, not one of the directions
 void InkHUD::InkHUD::joystickCenter()
 {
-    events->onJoystickCenter();
+    events->onJoystick(Events::JoystickInput::CENTER);
+}
+
+// Call this when a 4-directional input is moved upwards, relative to the display's rotation
+// Should be connected to an input source in nicheGraphics.h
+void InkHUD::InkHUD::joystickRelativeUp()
+{
+    events->onJoystick(Events::JoystickInput::UP, true);
+}
+
+// Call this when a 4-directional input is moved downwards, relative to the display's rotation
+// Should be connected to an input source in nicheGraphics.h
+void InkHUD::InkHUD::joystickRelativeDown()
+{
+    events->onJoystick(Events::JoystickInput::DOWN, true);
+}
+
+// Call this when a 4-directional input is moved leftwards, relative to the display's rotation
+// Should be connected to an input source in nicheGraphics.h
+void InkHUD::InkHUD::joystickRelativeLeft()
+{
+    events->onJoystick(Events::JoystickInput::LEFT, true);
+}
+
+// Call this when a 4-directional input is moved rightwards, relative to the display's rotation
+// Should be connected to an input source in nicheGraphics.h
+void InkHUD::InkHUD::joystickRelativeRight()
+{
+    events->onJoystick(Events::JoystickInput::RIGHT, true);
 }
 
 // Cycle the next user applet to the foreground

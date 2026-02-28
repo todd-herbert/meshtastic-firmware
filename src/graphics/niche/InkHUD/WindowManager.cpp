@@ -376,14 +376,21 @@ void InkHUD::WindowManager::placeSystemTiles()
 
     inkhud->getSystemApplet("Notification")->getTile()->setRegion(0, 0, inkhud->width(), 20);
 
-    const uint16_t batteryIconHeight = Applet::getHeaderHeight() - 2 - 2;
-    const uint16_t batteryIconWidth = batteryIconHeight * 1.8;
-    inkhud->getSystemApplet("BatteryIcon")
-        ->getTile()
-        ->setRegion(inkhud->width() - batteryIconWidth, // x
-                    2,                                  // y
-                    batteryIconWidth,                   // width
-                    batteryIconHeight);                 // height
+    {
+        // BatteryIcon
+        // - margin is outside tile: for positioning
+        // - padding is inside tile: area around battery which will be overfilled with white
+        constexpr uint16_t tileMarginY = 2;
+        const uint16_t batteryHeight = Applet::getHeaderHeight() - (2 * tileMarginY);
+        const uint16_t batteryWidth = batteryHeight * 1.8; // (Aesthetic choice)
+
+        inkhud->getSystemApplet("BatteryIcon")
+            ->getTile()
+            ->setRegion(inkhud->width() - batteryWidth - BatteryIconApplet::hatchW, // x
+                        tileMarginY - BatteryIconApplet::paddingY,                  // y
+                        batteryWidth + BatteryIconApplet::hatchW,                   // width
+                        batteryHeight + (2 * BatteryIconApplet::paddingY));         // height
+    }
 
     // Note: the tiles of placeholder and menu applets are manipulated specially
     // - menuApplet borrows user tiles

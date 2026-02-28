@@ -26,6 +26,9 @@ class BatteryIconApplet : public SystemApplet
     void onRender() override;
     int onPowerStatusUpdate(const meshtastic::Status *status); // Called when new info about battery is available
 
+    static constexpr uint16_t hatchW = 3;   // Width of background blur to left of battery (depth effect for applet header)
+    static constexpr uint16_t paddingY = 1; // Width of cleared whitespace above and below battery
+
   private:
     // Get informed when new information about the battery is available (via onPowerStatusUpdate method)
     CallbackObserver<BatteryIconApplet, const meshtastic::Status *> powerStatusObserver =

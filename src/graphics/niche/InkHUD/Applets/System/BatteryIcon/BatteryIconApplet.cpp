@@ -46,17 +46,22 @@ int InkHUD::BatteryIconApplet::onPowerStatusUpdate(const meshtastic::Status *sta
 
 void InkHUD::BatteryIconApplet::onRender()
 {
-    // Fill entire tile
-    // - size of icon controlled by size of tile
-    int16_t l = 0;
-    int16_t t = 0;
-    uint16_t w = width();
-    int16_t h = height();
+    // Region for the battery icon, relative to tile
+    // Leaves some empty whitespace above and below
+    int16_t l = hatchW;
+    int16_t t = paddingY;
+    uint16_t w = width() - hatchW;
+    int16_t h = height() - (2 * paddingY);
 
-    // Clear the region beneath the tile
+    // Clear the region beneath the battery
     // Most applets are drawing onto an empty frame buffer and don't need to do this
     // We do need to do this with the battery though, as it is an "overlay"
-    fillRect(l, t, w, h, WHITE);
+    fillRect(l, 0, width() - l, height(), WHITE);
+
+    // Partially clear the left edge of the tile
+    // Creates a "blur" effect on any underlying text
+    // Illusion of depth for applet header text passing behind the battery
+    hatchRegion(0, 0, l, h, 2, WHITE);
 
     // Vertical centerline
     const int16_t m = t + (h / 2);
@@ -65,22 +70,22 @@ void InkHUD::BatteryIconApplet::onRender()
     // Draw battery outline
     // =====================
 
-    // Positive terminal "bump"
-    const int16_t &bumpL = l;
-    const uint16_t bumpH = h / 2;
-    const int16_t bumpT = m - (bumpH / 2);
-    constexpr uint16_t bumpW = 2;
-    fillRect(bumpL, bumpT, bumpW, bumpH, BLACK);
-
     // Main body of battery
-    const int16_t bodyL = bumpL + bumpW;
+    const int16_t &bodyL = l;
     const int16_t &bodyT = t;
-    const int16_t &bodyH = h;
-    const int16_t bodyW = w - bumpW;
+    const uint16_t &bodyH = h;
+    const uint16_t bodyW = w - 2;
     drawRect(bodyL, bodyT, bodyW, bodyH, BLACK);
 
+    // Positive terminal "bump"
+    const int16_t bumpL = bodyL + bodyW;
+    const uint16_t bumpW = w - bodyW;
+    const uint16_t bumpH = h / 2;
+    const int16_t bumpT = m - (bumpH / 2);
+    fillRect(bumpL, bumpT, bumpW, bumpH, BLACK);
+
     // Erase join between bump and body
-    drawLine(bodyL, bumpT, bodyL, bumpT + bumpH - 1, WHITE);
+    drawLine(bumpL - 1, bumpT, bumpL - 1, bumpT + bumpH - 1, WHITE);
 
     // ===================
     // Draw battery level

@@ -79,20 +79,15 @@ void setupNicheGraphics()
     //  Buttons
     //  --------------------------
 
-    /* Not yet configured
+    Inputs::TwoButton *buttons = Inputs::TwoButton::getInstance(); // Shared NicheGraphics component
 
-        Inputs::TwoButton *buttons = Inputs::TwoButton::getInstance(); // Shared NicheGraphics component
+    // #0: Main User Button
+    buttons->setWiring(0, D13); // Not specified in variant.h, due to BaseUI shenanigans
+    buttons->setTiming(0, 0, 500);
+    buttons->setHandlerLongPress(0, []() { shutdownAtMsec = millis(); });
 
-        // #0: Main User Button
-        buttons->setWiring(0, Inputs::TwoButton::getUserButtonPin());
-        buttons->setTiming(0, 75, 500);
-        buttons->setHandlerShortPress(0, [inkhud]() { inkhud->shortpress(); });
-        buttons->setHandlerLongPress(0, [inkhud]() { inkhud->longpress(); });
-
-        // Begin handling button events
-        buttons->start();
-
-    */
+    // Begin handling button events
+    buttons->start();
 
     // Joystick
     // ---------

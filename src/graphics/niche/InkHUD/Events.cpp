@@ -97,23 +97,69 @@ void InkHUD::Events::onJoystick(JoystickInput direction, bool relative)
     // Check which system applet wants to handle input (if any)
     SystemApplet *handler = getHandler();
 
-    // Pass off to system applet, or fall back to a default behavior
-    switch (direction) {
-    case Events::JoystickInput::UP:
-        handler ? handler->onJoystickUp() : inkhud->previousApplet();
-        break;
-    case Events::JoystickInput::LEFT:
-        handler ? handler->onJoystickLeft() : inkhud->previousTile();
-        break;
-    case Events::JoystickInput::DOWN:
-        handler ? handler->onJoystickDown() : inkhud->nextApplet();
-        break;
-    case Events::JoystickInput::RIGHT:
-        handler ? handler->onJoystickRight() : inkhud->nextTile();
-        break;
-    case Events::JoystickInput::CENTER:
-        handler ? handler->onJoystickCenter() : inkhud->openMenu();
-        break;
+    // Pass off to a handler, if found
+    if (handler) {
+        switch (direction) {
+        case Events::JoystickInput::UP:
+            if (handler)
+                handler->onJoystickUp();
+            break;
+        case Events::JoystickInput::LEFT:
+            handler->onJoystickLeft();
+            break;
+        case Events::JoystickInput::DOWN:
+            handler->onJoystickDown();
+            break;
+        case Events::JoystickInput::RIGHT:
+            handler->onJoystickRight();
+            break;
+        case Events::JoystickInput::CENTER:
+            handler->onJoystickCenter();
+            break;
+        }
+    }
+
+    // Default behaviours (if special tile layout - two vertical)
+    // More natural to switch between tiles with up / down
+    else if (settings->userTiles.count == 2 && inkhud->height() > inkhud->width()) {
+        switch (direction) {
+        case Events::JoystickInput::UP:
+            inkhud->previousTile();
+            break;
+        case Events::JoystickInput::LEFT:
+            inkhud->previousApplet();
+            break;
+        case Events::JoystickInput::DOWN:
+            inkhud->nextTile();
+            break;
+        case Events::JoystickInput::RIGHT:
+            inkhud->nextApplet();
+            break;
+        case Events::JoystickInput::CENTER:
+            inkhud->openMenu();
+            break;
+        }
+    }
+
+    // Default behaviours (all other tile layouts)
+    else {
+        switch (direction) {
+        case Events::JoystickInput::UP:
+            inkhud->previousApplet();
+            break;
+        case Events::JoystickInput::LEFT:
+            inkhud->previousTile();
+            break;
+        case Events::JoystickInput::DOWN:
+            inkhud->nextApplet();
+            break;
+        case Events::JoystickInput::RIGHT:
+            inkhud->nextTile();
+            break;
+        case Events::JoystickInput::CENTER:
+            inkhud->openMenu();
+            break;
+        }
     }
 }
 

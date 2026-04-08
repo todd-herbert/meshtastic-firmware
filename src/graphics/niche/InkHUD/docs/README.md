@@ -67,8 +67,6 @@ InkHUD aims to be a "heads up display". The intention is for the user to glance 
 
 Some interactivity is tolerated as a means to an end: the display _should_ be customizable, but this should be minimized as much as possible.
 
-_Edit: there's significant demand for keyboard support, so some sort of free-text feature will need to be added eventually, although it does go against the original design principles._
-
 ### Customizable
 
 The user should be given the choice to decide which information they would like to receive, and how they would like to receive it.

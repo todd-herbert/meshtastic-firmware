@@ -154,7 +154,7 @@ int32_t GPIOJoystick::runOnce()
 
 // Detach our class' interrupts before lightsleep
 // Allows sleep.cpp to configure its own interrupts, which wake the device on user-button press
-int TwoButton::beforeLightSleep(void *unused)
+int GPIOJoystick::beforeLightSleep(void *unused)
 {
     stop();
     return 0; // Indicates success
@@ -162,7 +162,7 @@ int TwoButton::beforeLightSleep(void *unused)
 
 // Reconfigure our interrupts
 // Our class' interrupts were disconnected during sleep, to allow the user button to wake the device from sleep
-int TwoButton::afterLightSleep(esp_sleep_wakeup_cause_t cause)
+int GPIOJoystick::afterLightSleep(esp_sleep_wakeup_cause_t cause)
 {
     start();
     return 0; // Indicates success

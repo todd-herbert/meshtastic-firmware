@@ -50,7 +50,7 @@ class GPIOJoystick : private concurrency::OSThread
 
   private:
     GPIOJoystick(); // Constructor made private: force use of GPIOJoystick::getInstance()
-    static void noop() {};
+    static void noop(){};
 
     // Need to hard-code an ISR for each GPIO of the joystick
     static void isrUP() { getInstance()->handlePressBegin(UP); }
@@ -66,8 +66,9 @@ class GPIOJoystick : private concurrency::OSThread
     uint8_t pins[5] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF}; // Size matches GPIOJoystick::Direction enum
     Callback callbacks[5] = {noop, noop, noop, noop, noop};
 
-    Direction pressedDirection; // Set by an ISR when press begins. Used by runOnce, to poll release / run callback
-    uint32_t pressedAtMs;       // For debouncing
+    // (Init as -1 to satistfy cppcheck)
+    Direction pressedDirection = (Direction)-1; // Set by an ISR when press begins. Used by runOnce, to poll release/run callback
+    uint32_t pressedAtMs = -1;                  // For debouncing
 
 #ifdef ARCH_ESP32
     // Get notified when lightsleep begins and ends

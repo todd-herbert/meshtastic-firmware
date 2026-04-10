@@ -184,14 +184,14 @@ void InkHUD::MapApplet::getMapCenter(float *lat, float *lng)
             continue;
 
         // Check for a new top or bottom latitude
-        float lat = node->position.latitude_i * 1e-7;
-        northernmost = max(northernmost, lat);
-        southernmost = min(southernmost, lat);
+        float testLat = node->position.latitude_i * 1e-7;
+        northernmost = max(northernmost, testLat);
+        southernmost = min(southernmost, testLat);
 
         // Longitude is trickier
-        float lng = node->position.longitude_i * 1e-7;
-        float degEastward = fmod(((lng - lngCenter) + 360), 360);      // Degrees traveled east from lngCenter to reach node
-        float degWestward = abs(fmod(((lng - lngCenter) - 360), 360)); // Degrees traveled west from lngCenter to reach node
+        float testLng = node->position.longitude_i * 1e-7;
+        float degEastward = fmod(((testLng - lngCenter) + 360), 360);      // Degrees traveled east from lngCenter to reach node
+        float degWestward = abs(fmod(((testLng - lngCenter) - 360), 360)); // Degrees traveled west from lngCenter to reach node
         if (degEastward < degWestward)
             easternmost = max(easternmost, lngCenter + degEastward);
         else

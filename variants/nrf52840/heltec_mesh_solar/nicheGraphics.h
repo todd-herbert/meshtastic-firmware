@@ -1,3 +1,5 @@
+#warning InkHUD Lite has not been tested on this device. Supplied as-is.
+
 #pragma once
 
 #include "configuration.h"

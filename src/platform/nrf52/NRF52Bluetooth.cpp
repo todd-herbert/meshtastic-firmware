@@ -28,6 +28,9 @@ static BLEDfuSecure bledfusecure;                                             //
 static uint8_t fromRadioBytes[meshtastic_FromRadio_size];
 static uint8_t toRadioBytes[meshtastic_ToRadio_size];
 
+// Last ToRadio value received from the phone
+static uint8_t lastToRadio[MAX_TO_FROM_RADIO_SIZE];
+
 static uint16_t connectionHandle;
 
 class BluetoothPhoneAPI : public PhoneAPI
@@ -39,16 +42,15 @@ class BluetoothPhoneAPI : public PhoneAPI
     {
         PhoneAPI::onNowHasData(fromRadioNum);
 
-        LOG_INFO("BLE notify fromNum\n");
+        LOG_INFO("BLE notify fromNum");
         fromNum.notify32(fromRadioNum);
     }
 
     /// Check the current underlying physical link to see if the client is currently connected
-    virtual bool checkIsConnected() override
-    {
-        BLEConnection *connection = Bluefruit.Connection(connectionHandle);
-        return connection->connected();
-    }
+    virtual bool checkIsConnected() override { return Bluefruit.connected(connectionHandle); }
+
+  public:
+    BluetoothPhoneAPI() { api_type = TYPE_BLE; }
 };
 
 static BluetoothPhoneAPI *bluetoothPhoneAPI;
@@ -60,7 +62,11 @@ void onConnect(uint16_t conn_handle)
     connectionHandle = conn_handle;
     char central_name[32] = {0};
     connection->getPeerName(central_name, sizeof(central_name));
-    LOG_INFO("BLE Connected to %s\n", central_name);
+    LOG_INFO("BLE Connected to %s", central_name);
+
+    // Notify UI (or any other interested firmware components)
+    meshtastic::BluetoothStatus newStatus(meshtastic::BluetoothStatus::ConnectionState::CONNECTED);
+    bluetoothStatus->updateStatus(&newStatus);
 }
 /**
  * Callback invoked when a connection is dropped
@@ -69,15 +75,22 @@ void onConnect(uint16_t conn_handle)
  */
 void onDisconnect(uint16_t conn_handle, uint8_t reason)
 {
-    LOG_INFO("BLE Disconnected, reason = 0x%x\n", reason);
+    LOG_INFO("BLE Disconnected, reason = 0x%x", reason);
     if (bluetoothPhoneAPI) {
         bluetoothPhoneAPI->close();
     }
+
+    // Clear the last ToRadio packet buffer to avoid rejecting first packet from new connection
+    memset(lastToRadio, 0, sizeof(lastToRadio));
+
+    // Notify UI (or any other interested firmware components)
+    meshtastic::BluetoothStatus newStatus(meshtastic::BluetoothStatus::ConnectionState::DISCONNECTED);
+    bluetoothStatus->updateStatus(&newStatus);
 }
 void onCccd(uint16_t conn_hdl, BLECharacteristic *chr, uint16_t cccd_value)
 {
     // Display the raw request packet
-    LOG_INFO("CCCD Updated: %u\n", cccd_value);
+    LOG_INFO("CCCD Updated: %u", cccd_value);
     // Check the characteristic this CCCD update is associated with in case
     // this handler is used for multiple CCCD records.
 
@@ -87,9 +100,9 @@ void onCccd(uint16_t conn_hdl, BLECharacteristic *chr, uint16_t cccd_value)
     if (chr->uuid == fromNum.uuid || chr->uuid == logRadio.uuid) {
         auto result = cccd_value == 2 ? chr->indicateEnabled(conn_hdl) : chr->notifyEnabled(conn_hdl);
         if (result) {
-            LOG_INFO("Notify/Indicate enabled\n");
+            LOG_INFO("Notify/Indicate enabled");
         } else {
-            LOG_INFO("Notify/Indicate disabled\n");
+            LOG_INFO("Notify/Indicate disabled");
         }
     }
 }
@@ -137,22 +150,20 @@ void onFromRadioAuthorize(uint16_t conn_hdl, BLECharacteristic *chr, ble_gatts_e
         // or make empty if the queue is empty
         fromRadio.write(fromRadioBytes, numBytes);
     } else {
-        // LOG_INFO("Ignoring successor read\n");
+        // LOG_INFO("Ignore successor read");
     }
     authorizeRead(conn_hdl);
 }
-// Last ToRadio value received from the phone
-static uint8_t lastToRadio[MAX_TO_FROM_RADIO_SIZE];
 
 void onToRadioWrite(uint16_t conn_hdl, BLECharacteristic *chr, uint8_t *data, uint16_t len)
 {
-    LOG_INFO("toRadioWriteCb data %p, len %u\n", data, len);
+    LOG_INFO("toRadioWriteCb data %p, len %u", data, len);
     if (memcmp(lastToRadio, data, len) != 0) {
-        LOG_DEBUG("New ToRadio packet\n");
+        LOG_DEBUG("New ToRadio packet");
         memcpy(lastToRadio, data, len);
         bluetoothPhoneAPI->handleToRadio(data, len);
     } else {
-        LOG_DEBUG("Dropping duplicate ToRadio packet we just saw\n");
+        LOG_DEBUG("Drop dup ToRadio packet we just saw");
     }
 }
 
@@ -207,15 +218,9 @@ static uint32_t configuredPasskey;
 void NRF52Bluetooth::shutdown()
 {
     // Shutdown bluetooth for minimum power draw
-    LOG_INFO("Disable NRF52 bluetooth\n");
-    uint8_t connection_num = Bluefruit.connected();
-    if (connection_num) {
-        for (uint8_t i = 0; i < connection_num; i++) {
-            LOG_INFO("NRF52 bluetooth disconnecting handle %d\n", i);
-            Bluefruit.disconnect(i);
-        }
-        delay(100); // wait for ondisconnect;
-    }
+    LOG_INFO("Disable NRF52 bluetooth");
+    Bluefruit.Security.setPairPasskeyCallback(NRF52Bluetooth::onUnwantedPairing); // Actively refuse (during factory reset)
+    disconnect();
     Bluefruit.Advertising.stop();
 }
 void NRF52Bluetooth::startDisabled()
@@ -225,7 +230,7 @@ void NRF52Bluetooth::startDisabled()
     // Shutdown bluetooth for minimum power draw
     Bluefruit.Advertising.stop();
     Bluefruit.setTxPower(-40); // Minimum power
-    LOG_INFO("Disabling NRF52 Bluetooth. (Workaround: tx power min, advertising stopped)\n");
+    LOG_INFO("Disable NRF52 Bluetooth. (Workaround: tx power min, advertise stopped)");
 }
 bool NRF52Bluetooth::isConnected()
 {
@@ -238,7 +243,7 @@ int NRF52Bluetooth::getRssi()
 void NRF52Bluetooth::setup()
 {
     // Initialise the Bluefruit module
-    LOG_INFO("Initialize the Bluefruit nRF52 module\n");
+    LOG_INFO("Init the Bluefruit nRF52 module");
     Bluefruit.autoConnLed(false);
     Bluefruit.configPrphBandwidth(BANDWIDTH_MAX);
     Bluefruit.begin();
@@ -251,7 +256,7 @@ void NRF52Bluetooth::setup()
                                 ? config.bluetooth.fixed_pin
                                 : random(100000, 999999);
         auto pinString = std::to_string(configuredPasskey);
-        LOG_INFO("Bluetooth pin set to '%i'\n", configuredPasskey);
+        LOG_INFO("Bluetooth pin set to '%i'", configuredPasskey);
         Bluefruit.Security.setPIN(pinString.c_str());
         Bluefruit.Security.setIOCaps(true, false, false);
         Bluefruit.Security.setPairPasskeyCallback(NRF52Bluetooth::onPairingPasskey);
@@ -275,22 +280,22 @@ void NRF52Bluetooth::setup()
     bledfusecure.begin();                                                     // Install the DFU helper
 #endif
     // Configure and Start the Device Information Service
-    LOG_INFO("Configuring the Device Information Service\n");
+    LOG_INFO("Init the Device Information Service");
     bledis.setModel(optstr(HW_VERSION));
     bledis.setFirmwareRev(optstr(APP_VERSION));
     bledis.begin();
     // Start the BLE Battery Service and set it to 100%
-    LOG_INFO("Configuring the Battery Service\n");
+    LOG_INFO("Init the Battery Service");
     blebas.begin();
     blebas.write(0); // Unknown battery level for now
     // Setup the Heart Rate Monitor service using
     // BLEService and BLECharacteristic classes
-    LOG_INFO("Configuring the Mesh bluetooth service\n");
+    LOG_INFO("Init the Mesh bluetooth service");
     setupMeshService();
     // Setup the advertising packet(s)
-    LOG_INFO("Setting up the advertising payload(s)\n");
+    LOG_INFO("Set up the advertising payload(s)");
     startAdv();
-    LOG_INFO("Advertising\n");
+    LOG_INFO("Advertise");
 }
 void NRF52Bluetooth::resumeAdvertising()
 {
@@ -306,7 +311,7 @@ void updateBatteryLevel(uint8_t level)
 }
 void NRF52Bluetooth::clearBonds()
 {
-    LOG_INFO("Clearing bluetooth bonds!\n");
+    LOG_INFO("Clear bluetooth bonds!");
     bond_print_list(BLE_GAP_ROLE_PERIPH);
     bond_print_list(BLE_GAP_ROLE_CENTRAL);
     Bluefruit.Periph.clearBonds();
@@ -314,37 +319,55 @@ void NRF52Bluetooth::clearBonds()
 }
 void NRF52Bluetooth::onConnectionSecured(uint16_t conn_handle)
 {
-    LOG_INFO("BLE connection secured\n");
+    LOG_INFO("BLE connection secured");
 }
 bool NRF52Bluetooth::onPairingPasskey(uint16_t conn_handle, uint8_t const passkey[6], bool match_request)
 {
-    LOG_INFO("BLE pairing process started with passkey %.3s %.3s\n", passkey, passkey + 3);
+    char passkey1[4] = {passkey[0], passkey[1], passkey[2], '\0'};
+    char passkey2[4] = {passkey[3], passkey[4], passkey[5], '\0'};
+    LOG_INFO("BLE pair process started with passkey %s %s", passkey1, passkey2);
     powerFSM.trigger(EVENT_BLUETOOTH_PAIR);
-    screen->startAlert([](OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) -> void {
-        char btPIN[16] = "888888";
-        snprintf(btPIN, sizeof(btPIN), "%06u", configuredPasskey);
-        int x_offset = display->width() / 2;
-        int y_offset = display->height() <= 80 ? 0 : 32;
-        display->setTextAlignment(TEXT_ALIGN_CENTER);
-        display->setFont(FONT_MEDIUM);
-        display->drawString(x_offset + x, y_offset + y, "Bluetooth");
 
-        display->setFont(FONT_SMALL);
-        y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_MEDIUM - 4 : y_offset + FONT_HEIGHT_MEDIUM + 5;
-        display->drawString(x_offset + x, y_offset + y, "Enter this code");
+    // Get passkey as string
+    // Note: possible leading zeros
+    std::string textkey;
+    for (uint8_t i = 0; i < 6; i++)
+        textkey += (char)passkey[i];
 
-        display->setFont(FONT_LARGE);
-        String displayPin(btPIN);
-        String pin = displayPin.substring(0, 3) + " " + displayPin.substring(3, 6);
-        y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_SMALL - 5 : y_offset + FONT_HEIGHT_SMALL + 5;
-        display->drawString(x_offset + x, y_offset + y, pin);
+    // Notify UI (or other components) of pairing event and passkey
+    meshtastic::BluetoothStatus newStatus(textkey);
+    bluetoothStatus->updateStatus(&newStatus);
 
-        display->setFont(FONT_SMALL);
-        String deviceName = "Name: ";
-        deviceName.concat(getDeviceName());
-        y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_LARGE - 6 : y_offset + FONT_HEIGHT_LARGE + 5;
-        display->drawString(x_offset + x, y_offset + y, deviceName);
-    });
+#if HAS_SCREEN &&                                                                                                                \
+    !defined(MESHTASTIC_EXCLUDE_SCREEN) // Todo: migrate this display code back into Screen class, and observe bluetoothStatus
+    if (screen) {
+        screen->startAlert([](OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) -> void {
+            char btPIN[16] = "888888";
+            snprintf(btPIN, sizeof(btPIN), "%06u", configuredPasskey);
+            int x_offset = display->width() / 2;
+            int y_offset = display->height() <= 80 ? 0 : 12;
+            display->setTextAlignment(TEXT_ALIGN_CENTER);
+            display->setFont(FONT_MEDIUM);
+            display->drawString(x_offset + x, y_offset + y, "Bluetooth");
+
+            display->setFont(FONT_SMALL);
+            y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_MEDIUM - 4 : y_offset + FONT_HEIGHT_MEDIUM + 5;
+            display->drawString(x_offset + x, y_offset + y, "Enter this code");
+
+            display->setFont(FONT_LARGE);
+            String displayPin(btPIN);
+            String pin = displayPin.substring(0, 3) + " " + displayPin.substring(3, 6);
+            y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_SMALL - 5 : y_offset + FONT_HEIGHT_SMALL + 5;
+            display->drawString(x_offset + x, y_offset + y, pin);
+
+            display->setFont(FONT_SMALL);
+            String deviceName = "Name: ";
+            deviceName.concat(getDeviceName());
+            y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_LARGE - 6 : y_offset + FONT_HEIGHT_LARGE + 5;
+            display->drawString(x_offset + x, y_offset + y, deviceName);
+        });
+    }
+#endif
     if (match_request) {
         uint32_t start_time = millis();
         while (millis() < start_time + 30000) {
@@ -352,16 +375,53 @@ bool NRF52Bluetooth::onPairingPasskey(uint16_t conn_handle, uint8_t const passke
                 break;
         }
     }
-    LOG_INFO("BLE passkey pairing: match_request=%i\n", match_request);
+    LOG_INFO("BLE passkey pair: match_request=%i", match_request);
     return true;
 }
+
+// Actively refuse new BLE pairings
+// After clearing bonds (at factory reset), clients seem initially able to attempt to re-pair, even with advertising disabled.
+// On NRF52Bluetooth::shutdown, we change the pairing callback to this method, to aggressively refuse any connection attempts.
+bool NRF52Bluetooth::onUnwantedPairing(uint16_t conn_handle, uint8_t const passkey[6], bool match_request)
+{
+    NRF52Bluetooth::disconnect();
+    return false;
+}
+
+// Disconnect any BLE connections
+void NRF52Bluetooth::disconnect()
+{
+    uint8_t connection_num = Bluefruit.connected();
+    if (connection_num) {
+        // Close all connections. We're only expecting one.
+        for (uint8_t i = 0; i < connection_num; i++)
+            Bluefruit.disconnect(i);
+
+        // Wait for disconnection
+        while (Bluefruit.connected())
+            yield();
+
+        LOG_INFO("Ended BLE connection");
+    }
+}
+
 void NRF52Bluetooth::onPairingCompleted(uint16_t conn_handle, uint8_t auth_status)
 {
-    if (auth_status == BLE_GAP_SEC_STATUS_SUCCESS)
-        LOG_INFO("BLE pairing success\n");
-    else
-        LOG_INFO("BLE pairing failed\n");
-    screen->endAlert();
+    if (auth_status == BLE_GAP_SEC_STATUS_SUCCESS) {
+        LOG_INFO("BLE pair success");
+        meshtastic::BluetoothStatus newConnectedStatus(meshtastic::BluetoothStatus::ConnectionState::CONNECTED);
+        bluetoothStatus->updateStatus(&newConnectedStatus);
+    } else {
+        LOG_INFO("BLE pair failed");
+        // Notify UI (or any other interested firmware components)
+        meshtastic::BluetoothStatus newDisconnectedStatus(meshtastic::BluetoothStatus::ConnectionState::DISCONNECTED);
+        bluetoothStatus->updateStatus(&newDisconnectedStatus);
+    }
+
+    // Todo: migrate this display code back into Screen class, and observe bluetoothStatus
+    if (screen) {
+        screen->endAlert();
+    }
 }
 
 void NRF52Bluetooth::sendLog(const uint8_t *logMessage, size_t length)

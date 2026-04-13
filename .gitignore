@@ -1,6 +1,8 @@
 .pio
-main/configuration.h
-main/credentials.h
+pio
+pio.tar
+web
+web.tar
 
 # ignore vscode IDE settings files
 .vscode/*
@@ -10,6 +12,9 @@ main/credentials.h
 *.code-workspace
 
 .idea
+.platformio
+.local
+.cache
 
 .DS_Store
 Thumbs.db
@@ -33,3 +38,6 @@ release/
 /compile_commands.json
 src/mesh/raspihttp/certificate.pem
 src/mesh/raspihttp/private_key.pem
+
+# Ignore logo (set at build time with platformio-custom.py)
+data/boot/logo.*

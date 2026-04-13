@@ -1,6 +1,6 @@
 #include "configuration.h"
 
-#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && __has_include(<Adafruit_INA260.h>)
 
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "INA260Sensor.h"
@@ -11,7 +11,7 @@ INA260Sensor::INA260Sensor() : TelemetrySensor(meshtastic_TelemetrySensorType_IN
 
 int32_t INA260Sensor::runOnce()
 {
-    LOG_INFO("Init sensor: %s\n", sensorName);
+    LOG_INFO("Init sensor: %s", sensorName);
     if (!hasSensor()) {
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }

@@ -10,6 +10,9 @@
 #endif
 
 // Particular boards might define a different max power based on what their hardware can do
+#if ARCH_PORTDUINO
+#define SX128X_MAX_POWER portduino_config.sx128x_max_power
+#endif
 #ifndef SX128X_MAX_POWER
 #define SX128X_MAX_POWER 13
 #endif
@@ -19,7 +22,7 @@ SX128xInterface<T>::SX128xInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs
                                     RADIOLIB_PIN_TYPE busy)
     : RadioLibInterface(hal, cs, irq, rst, busy, &lora), lora(&module)
 {
-    LOG_DEBUG("SX128xInterface(cs=%d, irq=%d, rst=%d, busy=%d)\n", cs, irq, rst, busy);
+    LOG_DEBUG("SX128xInterface(cs=%d, irq=%d, rst=%d, busy=%d)", cs, irq, rst, busy);
 }
 
 /// Initialise the Driver transport hardware and software.
@@ -38,13 +41,13 @@ template <typename T> bool SX128xInterface<T>::init()
 #endif
 
 #if ARCH_PORTDUINO
-    if (settingsMap[rxen] != RADIOLIB_NC) {
-        pinMode(settingsMap[rxen], OUTPUT);
-        digitalWrite(settingsMap[rxen], LOW); // Set low before becoming an output
+    if (portduino_config.lora_rxen_pin.pin != RADIOLIB_NC) {
+        pinMode(portduino_config.lora_rxen_pin.pin, OUTPUT);
+        digitalWrite(portduino_config.lora_rxen_pin.pin, LOW); // Set low before becoming an output
     }
-    if (settingsMap[txen] != RADIOLIB_NC) {
-        pinMode(settingsMap[txen], OUTPUT);
-        digitalWrite(settingsMap[txen], LOW); // Set low before becoming an output
+    if (portduino_config.lora_txen_pin.pin != RADIOLIB_NC) {
+        pinMode(portduino_config.lora_txen_pin.pin, OUTPUT);
+        digitalWrite(portduino_config.lora_txen_pin.pin, LOW); // Set low before becoming an output
     }
 #else
 #if defined(SX128X_RXEN) && (SX128X_RXEN != RADIOLIB_NC) // set not rx or tx mode
@@ -59,19 +62,16 @@ template <typename T> bool SX128xInterface<T>::init()
 
     RadioLibInterface::init();
 
-    if (power > SX128X_MAX_POWER) // This chip has lower power limits than some
-        power = SX128X_MAX_POWER;
-
-    limitPower();
+    limitPower(SX128X_MAX_POWER);
 
     preambleLength = 12; // 12 is the default for this chip, 32 does not RX at all
 
     int res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength);
     // \todo Display actual typename of the adapter, not just `SX128x`
-    LOG_INFO("SX128x init result %d\n", res);
+    LOG_INFO("SX128x init result %d", res);
 
     if ((config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_LORA_24) && (res == RADIOLIB_ERR_INVALID_FREQUENCY)) {
-        LOG_WARN("Radio chip only supports 2.4GHz LoRa. Adjusting Region and rebooting.\n");
+        LOG_WARN("Radio only supports 2.4GHz LoRa. Adjusting Region and rebooting");
         config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_LORA_24;
         nodeDB->saveToDisk(SEGMENT_CONFIG);
         delay(2000);
@@ -80,21 +80,22 @@ template <typename T> bool SX128xInterface<T>::init()
 #elif defined(ARCH_NRF52)
         NVIC_SystemReset();
 #else
-        LOG_ERROR("FIXME implement reboot for this platform. Skipping for now.\n");
+        LOG_ERROR("FIXME implement reboot for this platform. Skip for now");
 #endif
     }
 
-    LOG_INFO("Frequency set to %f\n", getFreq());
-    LOG_INFO("Bandwidth set to %f\n", bw);
-    LOG_INFO("Power output set to %d\n", power);
+    LOG_INFO("Frequency set to %f", getFreq());
+    LOG_INFO("Bandwidth set to %f", bw);
+    LOG_INFO("Power output set to %d", power);
 
 #if defined(SX128X_TXEN) && (SX128X_TXEN != RADIOLIB_NC) && defined(SX128X_RXEN) && (SX128X_RXEN != RADIOLIB_NC)
     if (res == RADIOLIB_ERR_NONE) {
         lora.setRfSwitchPins(SX128X_RXEN, SX128X_TXEN);
     }
 #elif ARCH_PORTDUINO
-    if (res == RADIOLIB_ERR_NONE && settingsMap[rxen] != RADIOLIB_NC && settingsMap[txen] != RADIOLIB_NC) {
-        lora.setRfSwitchPins(settingsMap[rxen], settingsMap[txen]);
+    if (res == RADIOLIB_ERR_NONE && portduino_config.lora_rxen_pin.pin != RADIOLIB_NC &&
+        portduino_config.lora_txen_pin.pin != RADIOLIB_NC) {
+        lora.setRfSwitchPins(portduino_config.lora_rxen_pin.pin, portduino_config.lora_txen_pin.pin);
     }
 #endif
 
@@ -129,12 +130,12 @@ template <typename T> bool SX128xInterface<T>::reconfigure()
 
     err = lora.setSyncWord(syncWord);
     if (err != RADIOLIB_ERR_NONE)
-        LOG_ERROR("Radiolib error %d when attempting SX128X setSyncWord!\n", err);
+        LOG_ERROR("SX128X setSyncWord %s%d", radioLibErr, err);
     assert(err == RADIOLIB_ERR_NONE);
 
     err = lora.setPreambleLength(preambleLength);
     if (err != RADIOLIB_ERR_NONE)
-        LOG_ERROR("Radiolib error %d when attempting SX128X setPreambleLength!\n", err);
+        LOG_ERROR("SX128X setPreambleLength %s%d", radioLibErr, err);
     assert(err == RADIOLIB_ERR_NONE);
 
     err = lora.setFrequency(getFreq());
@@ -146,7 +147,7 @@ template <typename T> bool SX128xInterface<T>::reconfigure()
 
     err = lora.setOutputPower(power);
     if (err != RADIOLIB_ERR_NONE)
-        LOG_ERROR("Radiolib error %d when attempting SX128X setOutputPower!\n", err);
+        LOG_ERROR("SX128X setOutputPower %s%d", radioLibErr, err);
     assert(err == RADIOLIB_ERR_NONE);
 
     startReceive(); // restart receiving
@@ -171,14 +172,14 @@ template <typename T> void SX128xInterface<T>::setStandby()
     int err = lora.standby();
 
     if (err != RADIOLIB_ERR_NONE)
-        LOG_ERROR("SX128x standby failed with error %d\n", err);
+        LOG_ERROR("SX128x standby %s%d", radioLibErr, err);
     assert(err == RADIOLIB_ERR_NONE);
 #if ARCH_PORTDUINO
-    if (settingsMap[rxen] != RADIOLIB_NC) {
-        digitalWrite(settingsMap[rxen], LOW);
+    if (portduino_config.lora_rxen_pin.pin != RADIOLIB_NC) {
+        digitalWrite(portduino_config.lora_rxen_pin.pin, LOW);
     }
-    if (settingsMap[txen] != RADIOLIB_NC) {
-        digitalWrite(settingsMap[txen], LOW);
+    if (portduino_config.lora_txen_pin.pin != RADIOLIB_NC) {
+        digitalWrite(portduino_config.lora_txen_pin.pin, LOW);
     }
 #else
 #if defined(SX128X_RXEN) && (SX128X_RXEN != RADIOLIB_NC) // we have RXEN/TXEN control - turn off RX and TX power
@@ -200,9 +201,10 @@ template <typename T> void SX128xInterface<T>::setStandby()
  */
 template <typename T> void SX128xInterface<T>::addReceiveMetadata(meshtastic_MeshPacket *mp)
 {
-    // LOG_DEBUG("PacketStatus %x\n", lora.getPacketStatus());
+    // LOG_DEBUG("PacketStatus %x", lora.getPacketStatus());
     mp->rx_snr = lora.getSNR();
     mp->rx_rssi = lround(lora.getRSSI());
+    LOG_DEBUG("Corrected frequency offset: %f", lora.getFrequencyError());
 }
 
 /** We override to turn on transmitter power as needed.
@@ -210,11 +212,11 @@ template <typename T> void SX128xInterface<T>::addReceiveMetadata(meshtastic_Mes
 template <typename T> void SX128xInterface<T>::configHardwareForSend()
 {
 #if ARCH_PORTDUINO
-    if (settingsMap[txen] != RADIOLIB_NC) {
-        digitalWrite(settingsMap[txen], HIGH);
+    if (portduino_config.lora_txen_pin.pin != RADIOLIB_NC) {
+        digitalWrite(portduino_config.lora_txen_pin.pin, HIGH);
     }
-    if (settingsMap[rxen] != RADIOLIB_NC) {
-        digitalWrite(settingsMap[rxen], LOW);
+    if (portduino_config.lora_rxen_pin.pin != RADIOLIB_NC) {
+        digitalWrite(portduino_config.lora_rxen_pin.pin, LOW);
     }
 
 #else
@@ -241,11 +243,11 @@ template <typename T> void SX128xInterface<T>::startReceive()
     setStandby();
 
 #if ARCH_PORTDUINO
-    if (settingsMap[rxen] != RADIOLIB_NC) {
-        digitalWrite(settingsMap[rxen], HIGH);
+    if (portduino_config.lora_rxen_pin.pin != RADIOLIB_NC) {
+        digitalWrite(portduino_config.lora_rxen_pin.pin, HIGH);
     }
-    if (settingsMap[txen] != RADIOLIB_NC) {
-        digitalWrite(settingsMap[txen], LOW);
+    if (portduino_config.lora_txen_pin.pin != RADIOLIB_NC) {
+        digitalWrite(portduino_config.lora_txen_pin.pin, LOW);
     }
 
 #else
@@ -257,11 +259,10 @@ template <typename T> void SX128xInterface<T>::startReceive()
 #endif
 #endif
 
-    // We use the PREAMBLE_DETECTED and HEADER_VALID IRQ flag to detect whether we are actively receiving
-    int err = lora.startReceive(RADIOLIB_SX128X_RX_TIMEOUT_INF, RADIOLIB_IRQ_RX_DEFAULT_FLAGS | RADIOLIB_IRQ_PREAMBLE_DETECTED);
+    int err = lora.startReceive(RADIOLIB_SX128X_RX_TIMEOUT_INF, MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS);
 
     if (err != RADIOLIB_ERR_NONE)
-        LOG_ERROR("Radiolib error %d when attempting SX128X startReceive!\n", err);
+        LOG_ERROR("SX128X startReceive %s%d", radioLibErr, err);
     assert(err == RADIOLIB_ERR_NONE);
 
     RadioLibInterface::startReceive();
@@ -275,14 +276,21 @@ template <typename T> void SX128xInterface<T>::startReceive()
 template <typename T> bool SX128xInterface<T>::isChannelActive()
 {
     // check if we can detect a LoRa preamble on the current channel
+    ChannelScanConfig_t cfg = {.cad = {.symNum = NUM_SYM_CAD_24GHZ,
+                                       .detPeak = 0,
+                                       .detMin = 0,
+                                       .exitMode = 0,
+                                       .timeout = 0,
+                                       .irqFlags = RADIOLIB_IRQ_CAD_DEFAULT_FLAGS,
+                                       .irqMask = RADIOLIB_IRQ_CAD_DEFAULT_MASK}};
     int16_t result;
 
     setStandby();
-    result = lora.scanChannel();
+    result = lora.scanChannel(cfg);
     if (result == RADIOLIB_LORA_DETECTED)
         return true;
     if (result != RADIOLIB_CHANNEL_FREE)
-        LOG_ERROR("Radiolib error %d when attempting SX128X scanChannel!\n", result);
+        LOG_ERROR("SX128X scanChannel %s%d", radioLibErr, result);
     assert(result != RADIOLIB_ERR_WRONG_MODEM);
 
     return false;
@@ -298,8 +306,8 @@ template <typename T> bool SX128xInterface<T>::sleep()
 {
     // Not keeping config is busted - next time nrf52 board boots lora sending fails  tcxo related? - see datasheet
     // \todo Display actual typename of the adapter, not just `SX128x`
-    LOG_DEBUG("SX128x entering sleep mode (FIXME, don't keep config)\n");
-    setStandby(); // Stop any pending operations
+    LOG_DEBUG("SX128x entering sleep mode"); // (FIXME, don't keep config)
+    setStandby();                            // Stop any pending operations
 
     // turn off TCXO if it was powered
     // FIXME - this isn't correct

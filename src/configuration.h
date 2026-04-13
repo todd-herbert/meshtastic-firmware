@@ -26,12 +26,15 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include <Arduino.h>
 
-#ifdef RV3028_RTC
+#if __has_include("Melopero_RV3028.h")
 #include "Melopero_RV3028.h"
 #endif
-#ifdef PCF8563_RTC
+#if __has_include("pcf8563.h")
 #include "pcf8563.h"
 #endif
+
+/* Offer chance for variant-specific defines */
+#include "variant.h"
 
 // -----------------------------------------------------------------------------
 // Version
@@ -80,10 +83,57 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // Override user saved region, for producing region-locked builds
 // #define REGULATORY_LORA_REGIONCODE meshtastic_Config_LoRaConfig_RegionCode_SG_923
 
-// Total system gain in dBm to subtract from Tx power to remain within regulatory ERP limit for non-licensed operators
-// This value should be set in variant.h and is PA gain + antenna gain (if system ships with an antenna)
-#ifndef REGULATORY_GAIN_LORA
-#define REGULATORY_GAIN_LORA 0
+// Total system gain in dBm to subtract from Tx power to remain within regulatory and Tx PA limits
+// The value consists of PA gain + antenna gain (if variant has a non-removable antenna)
+// TX_GAIN_LORA should be set with definitions below for common modules, or in variant.h.
+
+// Gain for common modules with transmit PAs
+#ifdef EBYTE_E22_900M30S
+// 10dB PA gain and 30dB rated output; based on measurements from
+// https://github.com/S5NC/EBYTE_ESP32-S3/blob/main/E22-900M30S%20power%20output%20testing.txt
+#define TX_GAIN_LORA 7
+#define SX126X_MAX_POWER 22
+#endif
+
+#ifdef EBYTE_E22_900M33S
+// 25dB PA gain and 33dB rated output; based on TX Power Curve from E22-900M33S_UserManual_EN_v1.0.pdf
+#define TX_GAIN_LORA 25
+#define SX126X_MAX_POWER 8
+#endif
+
+#ifdef NICERF_MINIF27
+// Note that datasheet power level of 9 corresponds with SX1262 at 22dBm
+// Maximum output power of 29dBm with VCC_PA = 5V
+#define TX_GAIN_LORA 7
+#define SX126X_MAX_POWER 22
+#endif
+
+#ifdef NICERF_F30_HF
+// Maximum output power of 29.6dBm with VCC = 5V and SX1262 at 22dBm
+#define TX_GAIN_LORA 8
+#define SX126X_MAX_POWER 22
+#endif
+
+#ifdef NICERF_F30_LF
+// Maximum output power of 32.0dBm with VCC = 5V and SX1262 at 22dBm
+#define TX_GAIN_LORA 10
+#define SX126X_MAX_POWER 22
+#endif
+
+#ifdef USE_GC1109_PA
+// Power Amps are often non-linear, so we can use an array of values for the power curve
+#define NUM_PA_POINTS 22
+#define TX_GAIN_LORA 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 10, 10, 9, 9, 8, 7
+#endif
+
+#ifdef RAK13302
+#define NUM_PA_POINTS 22
+#define TX_GAIN_LORA 7, 8, 8, 8, 8, 8, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 8
+#endif
+
+// Default system gain to 0 if not defined
+#ifndef TX_GAIN_LORA
+#define TX_GAIN_LORA 0
 #endif
 
 // -----------------------------------------------------------------------------
@@ -99,8 +149,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // -----------------------------------------------------------------------------
 // OLED & Input
 // -----------------------------------------------------------------------------
-
+#if defined(SEEED_WIO_TRACKER_L1) && !defined(SEEED_WIO_TRACKER_L1_EINK)
+#define SSD1306_ADDRESS 0x3D
+#define USE_SH1106
+#else
 #define SSD1306_ADDRESS 0x3C
+#endif
 #define ST7567_ADDRESS 0x3F
 
 // The SH1106 controller is almost, but not quite, the same as SSD1306
@@ -110,10 +164,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // Define if screen should be mirrored left to right
 // #define SCREEN_MIRROR
 
-// I2C Keyboards (M5Stack, RAK14004, T-Deck)
+// I2C Keyboards (M5Stack, RAK14004, T-Deck, T-Deck Pro, T-Lora Pager, CardKB, BBQ10, MPR121, TCA8418)
 #define CARDKB_ADDR 0x5F
 #define TDECK_KB_ADDR 0x55
 #define BBQ10_KB_ADDR 0x1F
+#define MPR121_KB_ADDR 0x5A
+#define TCA8418_KB_ADDR 0x34
 
 // -----------------------------------------------------------------------------
 // SENSOR
@@ -134,7 +190,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define LPS22HB_ADDR 0x5C
 #define LPS22HB_ADDR_ALT 0x5D
 #define SHT31_4x_ADDR 0x44
+#define SHT31_4x_ADDR_ALT 0x45
 #define PMSA0031_ADDR 0x12
+#define QMA6100P_ADDR 0x12
 #define AHT10_ADDR 0x38
 #define RCWL9620_ADDR 0x57
 #define VEML7700_ADDR 0x10
@@ -143,29 +201,44 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define OPT3001_ADDR_ALT 0x44
 #define MLX90632_ADDR 0x3A
 #define DFROBOT_LARK_ADDR 0x42
+#define DFROBOT_RAIN_ADDR 0x1d
 #define NAU7802_ADDR 0x2A
+#define MAX30102_ADDR 0x57
+#define SCD4X_ADDR 0x62
+#define MLX90614_ADDR_DEF 0x5A
+#define CGRADSENS_ADDR 0x66
+#define LTR390UV_ADDR 0x53
+#define XPOWERS_AXP192_AXP2101_ADDRESS 0x34 // same adress as TCA8418_KB
+#define PCT2075_ADDR 0x37
+#define BQ27220_ADDR 0x55 // same address as TDECK_KB
+#define BQ25896_ADDR 0x6B
+#define LTR553ALS_ADDR 0x23
 
 // -----------------------------------------------------------------------------
 // ACCELEROMETER
 // -----------------------------------------------------------------------------
 #define MPU6050_ADDR 0x68
-#define STK8BXX_ADR 0x18
-#define LIS3DH_ADR 0x18
+#define STK8BXX_ADDR 0x18
+#define LIS3DH_ADDR 0x18
+#define LIS3DH_ADDR_ALT 0x19
 #define BMA423_ADDR 0x19
 #define LSM6DS3_ADDR 0x6A
 #define BMX160_ADDR 0x69
 #define ICM20948_ADDR 0x69
 #define ICM20948_ADDR_ALT 0x68
+#define BHI260AP_ADDR 0x28
+#define BMM150_ADDR 0x13
+#define DA217_ADDR 0x26
 
 // -----------------------------------------------------------------------------
 // LED
 // -----------------------------------------------------------------------------
 #define NCP5623_ADDR 0x38
+#define LP5562_ADDR 0x30
 
 // -----------------------------------------------------------------------------
 // Security
 // -----------------------------------------------------------------------------
-#define ATECC608B_ADDR 0x35
 
 // -----------------------------------------------------------------------------
 // IO Expander
@@ -174,30 +247,54 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define TCA9555_ADDR 0x26
 
 // -----------------------------------------------------------------------------
-// GPS
-// -----------------------------------------------------------------------------
-#ifndef GPS_THREAD_INTERVAL
-#define GPS_THREAD_INTERVAL 200
-#endif
-
-// -----------------------------------------------------------------------------
 // Touchscreen
 // -----------------------------------------------------------------------------
 #define FT6336U_ADDR 0x48
+#define CST328_ADDR 0x1A
+#define CHSC6X_ADDR 0x2E
+
+// -----------------------------------------------------------------------------
+// RAK12035VB Soil Monitor (using RAK12023 up to 3 RAK12035 monitors can be connected)
+// - the default i2c address for this sensor is 0x20, and users are instructed to
+// set 0x21 and 0x22 for the second and third sensor if present.
+// -----------------------------------------------------------------------------
+#define RAK120351_ADDR 0x20
+#define RAK120352_ADDR 0x21
+#define RAK120353_ADDR 0x22
+
+// -----------------------------------------------------------------------------
+// BIAS-T Generator
+// -----------------------------------------------------------------------------
+#define TPS65233_ADDR 0x60
 
 // convert 24-bit color to 16-bit (56K)
 #define COLOR565(r, g, b) (((r & 0xF8) << 8) | ((g & 0xFC) << 3) | ((b & 0xF8) >> 3))
-
-/* Step #1: offer chance for variant-specific defines */
-#include "variant.h"
 
 #if defined(VEXT_ENABLE) && !defined(VEXT_ON_VALUE)
 // Older variant.h files might not be defining this value, so stay with the old default
 #define VEXT_ON_VALUE LOW
 #endif
 
+// -----------------------------------------------------------------------------
+// Rotary encoder
+// -----------------------------------------------------------------------------
+#ifndef ROTARY_DELAY
+#define ROTARY_DELAY 5
+#endif
+
+// -----------------------------------------------------------------------------
+// GPS
+// -----------------------------------------------------------------------------
+
 #ifndef GPS_BAUDRATE
 #define GPS_BAUDRATE 9600
+#define GPS_BAUDRATE_FIXED 0
+#else
+#define GPS_BAUDRATE_FIXED 1
+#endif
+
+#ifndef GPS_THREAD_INTERVAL
+#define GPS_THREAD_INTERVAL 200
 #endif
 
 /* Step #2: follow with defines common to the architecture;
@@ -237,6 +334,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #ifndef HAS_SCREEN
 #define HAS_SCREEN 0
 #endif
+#ifndef HAS_TFT
+#define HAS_TFT 0
+#endif
 #ifndef HAS_WIRE
 #define HAS_WIRE 0
 #endif
@@ -275,6 +375,41 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #error HW_VENDOR must be defined
 #endif
 
+#ifndef TB_DOWN
+#define TB_DOWN 255
+#endif
+#ifndef TB_UP
+#define TB_UP 255
+#endif
+#ifndef TB_LEFT
+#define TB_LEFT 255
+#endif
+#ifndef TB_RIGHT
+#define TB_RIGHT 255
+#endif
+#ifndef TB_PRESS
+#define TB_PRESS 255
+#endif
+
+// Support multiple RGB LED configuration
+#if defined(HAS_NCP5623) || defined(HAS_LP5562) || defined(RGBLED_RED) || defined(HAS_NEOPIXEL) || defined(UNPHONE)
+#define HAS_RGB_LED
+#endif
+
+// default mapping of pins
+#if defined(PIN_BUTTON2) && !defined(CANCEL_BUTTON_PIN)
+#define ALT_BUTTON_PIN PIN_BUTTON2
+#endif
+#if defined ALT_BUTTON_PIN
+
+#ifndef ALT_BUTTON_ACTIVE_LOW
+#define ALT_BUTTON_ACTIVE_LOW true
+#endif
+#ifndef ALT_BUTTON_ACTIVE_PULLUP
+#define ALT_BUTTON_ACTIVE_PULLUP true
+#endif
+#endif
+
 // -----------------------------------------------------------------------------
 // Global switches to turn off features for a minimized build
 // -----------------------------------------------------------------------------
@@ -299,6 +434,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define MESHTASTIC_EXCLUDE_AUDIO 1
 #define MESHTASTIC_EXCLUDE_DETECTIONSENSOR 1
 #define MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR 1
+#define MESHTASTIC_EXCLUDE_HEALTH_TELEMETRY 1
 #define MESHTASTIC_EXCLUDE_EXTERNALNOTIFICATION 1
 #define MESHTASTIC_EXCLUDE_PAXCOUNTER 1
 #define MESHTASTIC_EXCLUDE_POWER_TELEMETRY 1

@@ -1,6 +1,7 @@
 #include "configuration.h"
 #include <Adafruit_TinyUSB.h>
 #include <Adafruit_nRFCrypto.h>
+#include <InternalFileSystem.h>
 #include <SPI.h>
 #include <Wire.h>
 #include <assert.h>
@@ -13,6 +14,9 @@
 #include "error.h"
 #include "main.h"
 #include "meshUtils.h"
+#include "power.h"
+
+#include <hal/nrf_lpcomp.h>
 
 #ifdef BQ25703A_ADDR
 #include "BQ25713.h"
@@ -35,7 +39,7 @@ bool loopCanSleep()
 // handle standard gcc assert failures
 void __attribute__((noreturn)) __assert_func(const char *file, int line, const char *func, const char *failedexpr)
 {
-    LOG_ERROR("assert failed %s: %d, %s, test=%s\n", file, line, func, failedexpr);
+    LOG_ERROR("assert failed %s: %d, %s, test=%s", file, line, func, failedexpr);
     // debugger_break(); FIXME doesn't work, possibly not for segger
     // Reboot cpu
     NVIC_SystemReset();
@@ -74,7 +78,7 @@ void setBluetoothEnable(bool enable)
     // For debugging use: don't use bluetooth
     if (!useSoftDevice) {
         if (enable)
-            LOG_INFO("DISABLING NRF52 BLUETOOTH WHILE DEBUGGING\n");
+            LOG_INFO("Disable NRF52 BLUETOOTH WHILE DEBUGGING");
         return;
     }
 
@@ -97,7 +101,7 @@ void setBluetoothEnable(bool enable)
 
         // If not yet set-up
         if (!nrf52Bluetooth) {
-            LOG_DEBUG("Initializing NRF52 Bluetooth\n");
+            LOG_DEBUG("Init NRF52 Bluetooth");
             nrf52Bluetooth = new NRF52Bluetooth();
             nrf52Bluetooth->setup();
 
@@ -130,6 +134,54 @@ int printf(const char *fmt, ...)
     return res;
 }
 
+namespace
+{
+constexpr uint8_t NRF52_MAGIC_LFS_IS_CORRUPT = 0xF5;
+constexpr uint32_t MULTIPLE_CORRUPTION_DELAY_MILLIS = 20 * 60 * 1000;
+static unsigned long millis_until_formatting_again = 0;
+
+// Report the critical error from loop(), giving a chance for the screen to be initialized first.
+inline void reportLittleFSCorruptionOnce()
+{
+    static bool report_corruption = !!millis_until_formatting_again;
+    if (report_corruption) {
+        report_corruption = false;
+        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_FLASH_CORRUPTION_UNRECOVERABLE);
+    }
+}
+} // namespace
+
+void preFSBegin()
+{
+    // The GPREGRET register keeps its value across warm boots. Check that this is a warm boot and, if GPREGRET
+    // is set to NRF52_MAGIC_LFS_IS_CORRUPT, format LittleFS.
+    if (!(NRF_POWER->RESETREAS == 0 && NRF_POWER->GPREGRET == NRF52_MAGIC_LFS_IS_CORRUPT))
+        return;
+    NRF_POWER->GPREGRET = 0;
+    millis_until_formatting_again = millis() + MULTIPLE_CORRUPTION_DELAY_MILLIS;
+    InternalFS.format();
+    LOG_INFO("LittleFS format complete; restoring default settings");
+}
+
+extern "C" void lfs_assert(const char *reason)
+{
+    LOG_ERROR("LittleFS corruption detected: %s", reason);
+    if (millis_until_formatting_again > millis()) {
+        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_FLASH_CORRUPTION_UNRECOVERABLE);
+        const long millis_remain = millis_until_formatting_again - millis();
+        LOG_WARN("Pausing %d seconds to avoid wear on flash storage", millis_remain / 1000);
+        delay(millis_remain);
+    }
+    LOG_INFO("Rebooting to format LittleFS");
+    delay(500); // Give the serial port a bit of time to output that last message.
+    // Try setting GPREGRET with the SoftDevice first. If that fails (perhaps because the SD hasn't been initialize yet) then set
+    // NRF_POWER->GPREGRET directly.
+    if (!(sd_power_gpregret_clr(0, 0xFF) == NRF_SUCCESS && sd_power_gpregret_set(0, NRF52_MAGIC_LFS_IS_CORRUPT) == NRF_SUCCESS)) {
+        NRF_POWER->GPREGRET = NRF52_MAGIC_LFS_IS_CORRUPT;
+    }
+    NVIC_SystemReset();
+}
+
 void checkSDEvents()
 {
     if (useSoftDevice) {
@@ -141,7 +193,7 @@ void checkSDEvents()
                 break;
 
             default:
-                LOG_DEBUG("Unexpected SDevt %d\n", evt);
+                LOG_DEBUG("Unexpected SDevt %d", evt);
                 break;
             }
         }
@@ -154,6 +206,7 @@ void checkSDEvents()
 void nrf52Loop()
 {
     checkSDEvents();
+    reportLittleFSCorruptionOnce();
 }
 
 #ifdef USE_SEMIHOSTING
@@ -185,10 +238,14 @@ void nrf52InitSemiHosting()
 
 void nrf52Setup()
 {
+#ifdef ADC_V
+    pinMode(ADC_V, INPUT);
+#endif
+
     uint32_t why = NRF_POWER->RESETREAS;
     // per
     // https://infocenter.nordicsemi.com/index.jsp?topic=%2Fcom.nordic.infocenter.nrf52832.ps.v1.1%2Fpower.html
-    LOG_DEBUG("Reset reason: 0x%x\n", why);
+    LOG_DEBUG("Reset reason: 0x%x", why);
 
 #ifdef USE_SEMIHOSTING
     nrf52InitSemiHosting();
@@ -202,7 +259,7 @@ void nrf52Setup()
 #ifdef BQ25703A_ADDR
     auto *bq = new BQ25713();
     if (!bq->setup())
-        LOG_ERROR("ERROR! Charge controller init failed\n");
+        LOG_ERROR("ERROR! Charge controller init failed");
 #endif
 
     // Init random seed
@@ -212,7 +269,7 @@ void nrf52Setup()
     } seed;
     nRFCrypto.begin();
     nRFCrypto.Random.generate(seed.seed8, sizeof(seed.seed8));
-    LOG_DEBUG("Setting random seed %u\n", seed.seed32);
+    LOG_DEBUG("Set random seed %u", seed.seed32);
     randomSeed(seed.seed32);
     nRFCrypto.end();
 }
@@ -225,11 +282,17 @@ void cpuDeepSleep(uint32_t msecToWake)
     Wire.end();
 #endif
     SPI.end();
-    // This may cause crashes as debug messages continue to flow.
-    Serial.end();
+#if SPI_INTERFACES_COUNT > 1
+    SPI1.end();
+#endif
+    if (Serial)       // Another check in case of disabled default serial, does nothing bad
+        Serial.end(); // This may cause crashes as debug messages continue to flow.
 
-#ifdef PIN_SERIAL_RX1
-    Serial1.end();
+        // This causes troubles with waking up on nrf52 (on pro-micro in particular):
+        // we have no Serial1 in use on nrf52, check Serial and GPS modules.
+#ifdef PIN_SERIAL1_RX
+    if (Serial1) // A straightforward solution to the wake from deepsleep problem
+        Serial1.end();
 #endif
     setBluetoothEnable(false);
 
@@ -252,14 +315,47 @@ void cpuDeepSleep(uint32_t msecToWake)
     nrf_gpio_cfg_default(SCREEN_TOUCH_INT);
     nrf_gpio_cfg_default(WB_I2C1_SCL);
     nrf_gpio_cfg_default(WB_I2C1_SDA);
+
+    // nrf_gpio_cfg_default(WB_I2C2_SCL);
+    // nrf_gpio_cfg_default(WB_I2C2_SDA);
+#endif
+#endif
+#ifdef MESHLINK
+#ifdef PIN_WD_EN
+    digitalWrite(PIN_WD_EN, LOW);
 #endif
 #endif
 
-#ifdef HELTEC_MESH_NODE_T114
+#if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_MESH_SOLAR)
     nrf_gpio_cfg_default(PIN_GPS_PPS);
     detachInterrupt(PIN_GPS_PPS);
     detachInterrupt(PIN_BUTTON1);
 #endif
+
+#ifdef ELECROW_ThinkNode_M1
+    for (int pin = 0; pin < 48; pin++) {
+        if (pin == 17 || pin == 19 || pin == 20 || pin == 22 || pin == 23 || pin == 24 || pin == 25 || pin == 9 || pin == 10 ||
+            pin == PIN_BUTTON1 || pin == PIN_BUTTON2) {
+            continue;
+        }
+        pinMode(pin, OUTPUT);
+    }
+    for (int pin = 0; pin < 48; pin++) {
+        if (pin == 17 || pin == 19 || pin == 20 || pin == 22 || pin == 23 || pin == 24 || pin == 25 || pin == 9 || pin == 10 ||
+            pin == PIN_BUTTON1 || pin == PIN_BUTTON2) {
+            continue;
+        }
+        digitalWrite(pin, LOW);
+    }
+    for (int pin = 0; pin < 48; pin++) {
+        if (pin == 17 || pin == 19 || pin == 20 || pin == 22 || pin == 23 || pin == 24 || pin == 25 || pin == 9 || pin == 10 ||
+            pin == PIN_BUTTON1 || pin == PIN_BUTTON2) {
+            continue;
+        }
+        NRF_GPIO->DIRCLR = (1 << pin);
+    }
+#endif
+
     // Sleepy trackers or sensors can low power "sleep"
     // Don't enter this if we're sleeping portMAX_DELAY, since that's a shutdown event
     if (msecToWake != portMAX_DELAY &&
@@ -270,12 +366,52 @@ void cpuDeepSleep(uint32_t msecToWake)
         delay(msecToWake);
         NVIC_SystemReset();
     } else {
+        // Resume on user button press
+        // https://github.com/lyusupov/SoftRF/blob/81c519ca75693b696752235d559e881f2e0511ee/software/firmware/source/SoftRF/src/platform/nRF52.cpp#L1738
+        constexpr uint32_t DFU_MAGIC_SKIP = 0x6d;
+        sd_power_gpregret_clr(0, 0xFF);           // Clear the register before setting a new values in it for stability reasons
+        sd_power_gpregret_set(0, DFU_MAGIC_SKIP); // Equivalent NRF_POWER->GPREGRET = DFU_MAGIC_SKIP
+
         // FIXME, use system off mode with ram retention for key state?
         // FIXME, use non-init RAM per
         // https://devzone.nordicsemi.com/f/nordic-q-a/48919/ram-retention-settings-with-softdevice-enabled
+
+#ifdef ELECROW_ThinkNode_M1
+        nrf_gpio_cfg_input(PIN_BUTTON1, NRF_GPIO_PIN_PULLUP); // Configure the pin to be woken up as an input
+        nrf_gpio_pin_sense_t sense = NRF_GPIO_PIN_SENSE_LOW;
+        nrf_gpio_cfg_sense_set(PIN_BUTTON1, sense);
+
+        nrf_gpio_cfg_input(PIN_BUTTON2, NRF_GPIO_PIN_PULLUP);
+        nrf_gpio_pin_sense_t sense1 = NRF_GPIO_PIN_SENSE_LOW;
+        nrf_gpio_cfg_sense_set(PIN_BUTTON2, sense1);
+#endif
+
+#ifdef PROMICRO_DIY_TCXO
+        nrf_gpio_cfg_input(BUTTON_PIN, NRF_GPIO_PIN_PULLUP); // Enable internal pull-up on the button pin
+        nrf_gpio_pin_sense_t sense = NRF_GPIO_PIN_SENSE_LOW; // Configure SENSE signal on low edge
+        nrf_gpio_cfg_sense_set(BUTTON_PIN, sense);           // Apply SENSE to wake up the device from the deep sleep
+#endif
+
+#ifdef BATTERY_LPCOMP_INPUT
+        // Wake up if power rises again
+        nrf_lpcomp_config_t c;
+        c.reference = BATTERY_LPCOMP_THRESHOLD;
+        c.detection = NRF_LPCOMP_DETECT_UP;
+        c.hyst = NRF_LPCOMP_HYST_NOHYST;
+        nrf_lpcomp_configure(NRF_LPCOMP, &c);
+        nrf_lpcomp_input_select(NRF_LPCOMP, BATTERY_LPCOMP_INPUT);
+        nrf_lpcomp_enable(NRF_LPCOMP);
+
+        battery_adcEnable();
+
+        nrf_lpcomp_task_trigger(NRF_LPCOMP, NRF_LPCOMP_TASK_START);
+        while (!nrf_lpcomp_event_check(NRF_LPCOMP, NRF_LPCOMP_EVENT_READY))
+            ;
+#endif
+
         auto ok = sd_power_system_off();
         if (ok != NRF_SUCCESS) {
-            LOG_ERROR("FIXME: Ignoring soft device (EasyDMA pending?) and forcing system-off!\n");
+            LOG_ERROR("FIXME: Ignoring soft device (EasyDMA pending?) and forcing system-off!");
             NRF_POWER->SYSTEMOFF = 1;
         }
     }

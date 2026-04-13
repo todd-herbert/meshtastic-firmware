@@ -13,6 +13,7 @@ void handleFsBrowseStatic(HTTPRequest *req, HTTPResponse *res);
 void handleFsDeleteStatic(HTTPRequest *req, HTTPResponse *res);
 void handleBlinkLED(HTTPRequest *req, HTTPResponse *res);
 void handleReport(HTTPRequest *req, HTTPResponse *res);
+void handleNodes(HTTPRequest *req, HTTPResponse *res);
 void handleUpdateFs(HTTPRequest *req, HTTPResponse *res);
 void handleDeleteFsContent(HTTPRequest *req, HTTPResponse *res);
 void handleFs(HTTPRequest *req, HTTPResponse *res);
@@ -25,7 +26,7 @@ class HttpAPI : public PhoneAPI
 {
 
   public:
-    // Nothing here yet
+    HttpAPI() { api_type = TYPE_HTTP; }
 
   private:
     // Nothing here yet

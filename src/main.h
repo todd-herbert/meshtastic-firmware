@@ -1,5 +1,6 @@
 #pragma once
 
+#include "BluetoothStatus.h"
 #include "GPSStatus.h"
 #include "NodeStatus.h"
 #include "PowerStatus.h"
@@ -10,9 +11,6 @@
 #include "mesh/generated/meshtastic/telemetry.pb.h"
 #include <SPI.h>
 #include <map>
-#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
-#include <SparkFun_ATECCX08a_Arduino_Library.h>
-#endif
 #if defined(ARCH_ESP32) && !defined(CONFIG_IDF_TARGET_ESP32S2)
 #include "nimble/NimbleBluetooth.h"
 extern NimbleBluetooth *nimbleBluetooth;
@@ -20,6 +18,9 @@ extern NimbleBluetooth *nimbleBluetooth;
 #ifdef ARCH_NRF52
 #include "NRF52Bluetooth.h"
 extern NRF52Bluetooth *nrf52Bluetooth;
+#endif
+#if !MESHTASTIC_EXCLUDE_I2C
+#include "detect/ScanI2CTwoWire.h"
 #endif
 
 #if ARCH_PORTDUINO
@@ -30,20 +31,18 @@ extern HardwareSPI *LoraSPI;
 extern ScanI2C::DeviceAddress screen_found;
 extern ScanI2C::DeviceAddress cardkb_found;
 extern uint8_t kb_model;
+extern bool kb_found;
+extern bool osk_found;
 extern ScanI2C::DeviceAddress rtc_found;
 extern ScanI2C::DeviceAddress accelerometer_found;
 extern ScanI2C::FoundDevice rgb_found;
+extern ScanI2C::DeviceAddress aqi_found;
 
 extern bool eink_found;
 extern bool pmu_found;
-extern bool isCharging;
 extern bool isUSBPowered;
 
-#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
-extern ATECCX08A atecc;
-#endif
-
-#ifdef T_WATCH_S3
+#if defined(T_WATCH_S3) || defined(T_LORA_PAGER)
 #include <Adafruit_DRV2605.h>
 extern Adafruit_DRV2605 drv;
 #endif
@@ -53,10 +52,20 @@ extern Adafruit_DRV2605 drv;
 extern AudioThread *audioThread;
 #endif
 
+#ifdef ELECROW_ThinkNode_M5
+#include <PCA9557.h>
+extern PCA9557 io;
+#endif
+
+#ifdef HAS_UDP_MULTICAST
+#include "mesh/udp/UdpMulticastHandler.h"
+extern UdpMulticastHandler *udpHandler;
+#endif
+
 // Global Screen singleton.
 extern graphics::Screen *screen;
 
-#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C
+#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C
 #include "motion/AccelerometerThread.h"
 extern AccelerometerThread *accelerometerThread;
 #endif
@@ -84,6 +93,10 @@ extern bool pauseBluetoothLogging;
 void nrf52Setup(), esp32Setup(), nrf52Loop(), esp32Loop(), rp2040Setup(), clearBonds(), enterDfuMode();
 
 meshtastic_DeviceMetadata getDeviceMetadata();
+#if !MESHTASTIC_EXCLUDE_I2C
+void scannerToSensorsMap(const std::unique_ptr<ScanI2CTwoWire> &i2cScanner, ScanI2C::DeviceType deviceType,
+                         meshtastic_TelemetrySensorType sensorType);
+#endif
 
 // We default to 4MHz SPI, SPI mode 0
 extern SPISettings spiSettings;

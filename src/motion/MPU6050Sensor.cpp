@@ -1,6 +1,6 @@
 #include "MPU6050Sensor.h"
 
-#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C
+#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && __has_include(<Adafruit_MPU6050.h>)
 
 MPU6050Sensor::MPU6050Sensor(ScanI2C::FoundDevice foundDevice) : MotionSensor::MotionSensor(foundDevice) {}
 
@@ -13,10 +13,10 @@ bool MPU6050Sensor::init()
         sensor.setMotionDetectionDuration(20);
         sensor.setInterruptPinLatch(true); // Keep it latched.  Will turn off when reinitialized.
         sensor.setInterruptPinPolarity(true);
-        LOG_DEBUG("MPU6050Sensor::init ok\n");
+        LOG_DEBUG("MPU6050 init ok");
         return true;
     }
-    LOG_DEBUG("MPU6050Sensor::init failed\n");
+    LOG_DEBUG("MPU6050 init failed");
     return false;
 }
 

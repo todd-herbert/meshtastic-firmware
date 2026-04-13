@@ -10,7 +10,33 @@
 #include "aes-ccm.h"
 #if !MESHTASTIC_EXCLUDE_PKI
 
-static inline void WPA_PUT_BE16(uint8_t *a, uint16_t val)
+/**
+ * Constant-time comparison of two byte arrays
+ *
+ * @param a First byte array to compare
+ * @param b Second byte array to compare
+ * @param len Number of bytes to compare
+ * @return 0 if arrays are equal, -1 if different or if inputs are invalid
+ */
+static int constant_time_compare(const void *a_, const void *b_, size_t len)
+{
+    /* Cast to volatile to prevent the compiler from optimizing out their comparison. */
+    const volatile uint8_t *volatile a = (const volatile uint8_t *volatile)a_;
+    const volatile uint8_t *volatile b = (const volatile uint8_t *volatile)b_;
+    if (len == 0)
+        return 0;
+    if (a == NULL || b == NULL)
+        return -1;
+    size_t i;
+    volatile uint8_t d = 0U;
+    for (i = 0U; i < len; i++) {
+        d |= (a[i] ^ b[i]);
+    }
+    /* Constant time bit arithmetic to convert d > 0 to -1 and d = 0 to 0. */
+    return (1 & ((d - 1) >> 8)) - 1;
+}
+
+static void WPA_PUT_BE16(uint8_t *a, uint16_t val)
 {
     a[0] = val >> 8;
     a[1] = val & 0xff;
@@ -18,12 +44,9 @@ static inline void WPA_PUT_BE16(uint8_t *a, uint16_t val)
 
 static void xor_aes_block(uint8_t *dst, const uint8_t *src)
 {
-    uint32_t *d = (uint32_t *)dst;
-    uint32_t *s = (uint32_t *)src;
-    *d++ ^= *s++;
-    *d++ ^= *s++;
-    *d++ ^= *s++;
-    *d++ ^= *s++;
+    for (uint8_t i = 0; i < AES_BLOCK_SIZE; i++) {
+        dst[i] ^= src[i];
+    }
 }
 static void aes_ccm_auth_start(size_t M, size_t L, const uint8_t *nonce, const uint8_t *aad, size_t aad_len, size_t plain_len,
                                uint8_t *x)
@@ -149,7 +172,7 @@ bool aes_ccm_ad(const uint8_t *key, size_t key_len, const uint8_t *nonce, size_t
     aes_ccm_encr(L, crypt, crypt_len, plain, a);
     aes_ccm_auth_start(M, L, nonce, aad, aad_len, crypt_len, x);
     aes_ccm_auth(plain, crypt_len, x);
-    if (memcmp(x, t, M) != 0) { // FIXME make const comp
+    if (constant_time_compare(x, t, M) != 0) {
         return false;
     }
     return true;

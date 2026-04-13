@@ -23,6 +23,20 @@ struct _file_config {
     char *rootPath;
 };
 
+class HttpAPI : public PhoneAPI
+{
+
+  public:
+    HttpAPI() { api_type = TYPE_HTTP; }
+
+  private:
+    // Nothing here yet
+
+  protected:
+    /// Check the current underlying physical link to see if the client is currently connected
+    virtual bool checkIsConnected() override { return true; } // FIXME, be smarter about this
+};
+
 class PiWebServerThread
 {
   private:
@@ -30,6 +44,7 @@ class PiWebServerThread
     char *cert_pem = NULL;
     // struct _u_map mime_types;
     std::string webrootpath;
+    HttpAPI webAPI;
 
   public:
     PiWebServerThread();
@@ -38,21 +53,6 @@ class PiWebServerThread
     int CheckSSLandLoad();
     uint32_t requestRestart = 0;
     struct _u_instance instanceWeb;
-    struct _u_instance instanceService;
-};
-
-class HttpAPI : public PhoneAPI
-{
-
-  public:
-    // Nothing here yet
-
-  private:
-    // Nothing here yet
-
-  protected:
-    /// Check the current underlying physical link to see if the client is currently connected
-    virtual bool checkIsConnected() override { return true; } // FIXME, be smarter about this
 };
 
 extern PiWebServerThread *piwebServerThread;

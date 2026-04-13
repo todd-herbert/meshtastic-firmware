@@ -1,6 +1,6 @@
 #include "configuration.h"
 
-#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && __has_include(<Adafruit_BMP085.h>)
 
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "BMP085Sensor.h"
@@ -10,26 +10,23 @@
 
 BMP085Sensor::BMP085Sensor() : TelemetrySensor(meshtastic_TelemetrySensorType_BMP085, "BMP085") {}
 
-int32_t BMP085Sensor::runOnce()
+bool BMP085Sensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 {
-    LOG_INFO("Init sensor: %s\n", sensorName);
-    if (!hasSensor()) {
-        return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
-    }
+    LOG_INFO("Init sensor: %s", sensorName);
+
     bmp085 = Adafruit_BMP085();
-    status = bmp085.begin(nodeTelemetrySensorsMap[sensorType].first, nodeTelemetrySensorsMap[sensorType].second);
+    status = bmp085.begin(dev->address.address, bus);
 
-    return initI2CSensor();
+    initI2CSensor();
+    return status;
 }
-
-void BMP085Sensor::setup() {}
 
 bool BMP085Sensor::getMetrics(meshtastic_Telemetry *measurement)
 {
     measurement->variant.environment_metrics.has_temperature = true;
     measurement->variant.environment_metrics.has_barometric_pressure = true;
 
-    LOG_DEBUG("BMP085Sensor::getMetrics\n");
+    LOG_DEBUG("BMP085 getMetrics");
     measurement->variant.environment_metrics.temperature = bmp085.readTemperature();
     measurement->variant.environment_metrics.barometric_pressure = bmp085.readPressure() / 100.0F;
 

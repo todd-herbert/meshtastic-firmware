@@ -5,7 +5,7 @@
 
 #include "configuration.h"
 
-#if !MESHTASTIC_EXCLUDE_I2C && !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
+#if !MESHTASTIC_EXCLUDE_I2C && __has_include(<Adafruit_MAX1704X.h>)
 
 // Samples to store in a buffer to determine if the battery is charging or discharging
 #define MAX17048_CHARGING_SAMPLES 3
@@ -40,6 +40,7 @@ class MAX17048Singleton : public Adafruit_MAX17048
     std::queue<MAX17048ChargeSample> chargeSamples;
     MAX17048ChargeState chargeState = IDLE;
     const String chargeLabels[3] = {F("idle"), F("export"), F("import")};
+    const char *sensorStr = "MAX17048Sensor";
 
   protected:
     MAX17048Singleton();

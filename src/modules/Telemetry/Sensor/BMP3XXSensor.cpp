@@ -1,25 +1,23 @@
 #include "configuration.h"
 
-#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && __has_include(<Adafruit_BMP3XX.h>)
 
 #include "BMP3XXSensor.h"
 
 BMP3XXSensor::BMP3XXSensor() : TelemetrySensor(meshtastic_TelemetrySensorType_BMP3XX, "BMP3XX") {}
 
-void BMP3XXSensor::setup() {}
-
-int32_t BMP3XXSensor::runOnce()
+bool BMP3XXSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 {
-    LOG_INFO("Init sensor: %s\n", sensorName);
-    if (!hasSensor()) {
-        return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
-    }
+    LOG_INFO("Init sensor: %s", sensorName);
 
     // Get a singleton instance and initialise the bmp3xx
     if (bmp3xx == nullptr) {
         bmp3xx = BMP3XXSingleton::GetInstance();
     }
-    status = bmp3xx->begin_I2C(nodeTelemetrySensorsMap[sensorType].first, nodeTelemetrySensorsMap[sensorType].second);
+    status = bmp3xx->begin_I2C(dev->address.address, bus);
+    if (!status) {
+        return status;
+    }
 
     // set up oversampling and filter initialization
     bmp3xx->setTemperatureOversampling(BMP3_OVERSAMPLING_4X);
@@ -31,7 +29,8 @@ int32_t BMP3XXSensor::runOnce()
     for (int i = 0; i < 3; i++) {
         bmp3xx->performReading();
     }
-    return initI2CSensor();
+    initI2CSensor();
+    return status;
 }
 
 bool BMP3XXSensor::getMetrics(meshtastic_Telemetry *measurement)
@@ -50,11 +49,11 @@ bool BMP3XXSensor::getMetrics(meshtastic_Telemetry *measurement)
         measurement->variant.environment_metrics.barometric_pressure = static_cast<float>(bmp3xx->pressure) / 100.0F;
         measurement->variant.environment_metrics.relative_humidity = 0.0f;
 
-        LOG_DEBUG("BMP3XXSensor::getMetrics id: %i temp: %.1f press %.1f\n", measurement->which_variant,
+        LOG_DEBUG("BMP3XX getMetrics id: %i temp: %.1f press %.1f", measurement->which_variant,
                   measurement->variant.environment_metrics.temperature,
                   measurement->variant.environment_metrics.barometric_pressure);
     } else {
-        LOG_DEBUG("BMP3XXSensor::getMetrics id: %i\n", measurement->which_variant);
+        LOG_DEBUG("BMP3XX getMetrics id: %i", measurement->which_variant);
     }
     return true;
 }

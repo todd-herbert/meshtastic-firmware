@@ -5,6 +5,28 @@
 #include "detect/ScanI2C.h"
 #include "mesh/generated/meshtastic/config.pb.h"
 #include <OLEDDisplay.h>
+#include <functional>
+#include <string>
+#include <vector>
+
+#define getStringCenteredX(s) ((SCREEN_WIDTH - display->getStringWidth(s)) / 2)
+namespace graphics
+{
+enum notificationTypeEnum { none, text_banner, selection_picker, node_picker, number_picker, text_input };
+
+struct BannerOverlayOptions {
+    const char *message;
+    uint32_t durationMs = 30000;
+    const char **optionsArrayPtr = nullptr;
+    const int *optionsEnumPtr = nullptr;
+    uint8_t optionsCount = 0;
+    std::function<void(int)> bannerCallback = nullptr;
+    int8_t InitialSelected = 0;
+    notificationTypeEnum notificationType = notificationTypeEnum::text_banner;
+};
+} // namespace graphics
+
+bool shouldWakeOnReceivedMessage();
 
 #if !HAS_SCREEN
 #include "power.h"
@@ -14,19 +36,31 @@ namespace graphics
 class Screen
 {
   public:
+    enum FrameFocus : uint8_t {
+        FOCUS_DEFAULT,  // No specific frame
+        FOCUS_PRESERVE, // Return to the previous frame
+        FOCUS_FAULT,
+        FOCUS_TEXTMESSAGE,
+        FOCUS_MODULE, // Note: target module should call requestFocus(), otherwise no info about which module to focus
+        FOCUS_CLOCK,
+        FOCUS_SYSTEM,
+    };
+
     explicit Screen(ScanI2C::DeviceAddress, meshtastic_Config_DisplayConfig_OledType, OLEDDISPLAY_GEOMETRY);
     void onPress() {}
     void setup() {}
     void setOn(bool) {}
-    void print(const char *) {}
     void doDeepSleep() {}
     void forceDisplay(bool forceUiUpdate = false) {}
     void startFirmwareUpdateScreen() {}
     void increaseBrightness() {}
     void decreaseBrightness() {}
-    void setFunctionSymbal(std::string) {}
-    void removeFunctionSymbal(std::string) {}
+    void setFunctionSymbol(std::string) {}
+    void removeFunctionSymbol(std::string) {}
     void startAlert(const char *) {}
+    void showSimpleBanner(const char *message, uint32_t durationMs = 0) {}
+    void showOverlayBanner(BannerOverlayOptions) {}
+    void setFrames(FrameFocus focus) {}
     void endAlert() {}
 };
 } // namespace graphics
@@ -47,6 +81,8 @@ class Screen
 #include <SSD1306Wire.h>
 #elif defined(USE_ST7789)
 #include <ST7789Spi.h>
+#elif defined(USE_SPISSD1306)
+#include <SSD1306Spi.h>
 #else
 // the SH1106/SSD1306 variant is auto-detected
 #include <AutoOLEDWire.h>
@@ -60,10 +96,13 @@ class Screen
 #include "commands.h"
 #include "concurrency/LockGuard.h"
 #include "concurrency/OSThread.h"
+#include "graphics/draw/MenuHandler.h"
 #include "input/InputBroker.h"
 #include "mesh/MeshModule.h"
+#include "modules/AdminModule.h"
 #include "power.h"
 #include <string>
+#include <vector>
 
 // 0 to 255, though particular variants might define different defaults
 #ifndef BRIGHTNESS_DEFAULT
@@ -90,7 +129,7 @@ class Screen
 
 /// Convert an integer GPS coords to a floating point
 #define DegD(i) (i * 1e-7)
-
+extern bool hasUnreadMessage;
 namespace
 {
 /// A basic 2D point class for drawing
@@ -176,14 +215,31 @@ class Screen : public concurrency::OSThread
         CallbackObserver<Screen, const UIFrameEvent *>(this, &Screen::handleUIFrameEvent); // Sent by Mesh Modules
     CallbackObserver<Screen, const InputEvent *> inputObserver =
         CallbackObserver<Screen, const InputEvent *>(this, &Screen::handleInputEvent);
-    CallbackObserver<Screen, const meshtastic_AdminMessage *> adminMessageObserver =
-        CallbackObserver<Screen, const meshtastic_AdminMessage *>(this, &Screen::handleAdminMessage);
+    CallbackObserver<Screen, AdminModule_ObserverData *> adminMessageObserver =
+        CallbackObserver<Screen, AdminModule_ObserverData *>(this, &Screen::handleAdminMessage);
 
   public:
+    OLEDDisplay *getDisplayDevice() { return dispdev; }
     explicit Screen(ScanI2C::DeviceAddress, meshtastic_Config_DisplayConfig_OledType, OLEDDISPLAY_GEOMETRY);
-
+    size_t frameCount = 0; // Total number of active frames
     ~Screen();
 
+    // Which frame we want to be displayed, after we regen the frameset by calling setFrames
+    enum FrameFocus : uint8_t {
+        FOCUS_DEFAULT,  // No specific frame
+        FOCUS_PRESERVE, // Return to the previous frame
+        FOCUS_FAULT,
+        FOCUS_TEXTMESSAGE,
+        FOCUS_MODULE, // Note: target module should call requestFocus(), otherwise no info about which module to focus
+        FOCUS_CLOCK,
+        FOCUS_SYSTEM,
+    };
+
+    // Regenerate the normal set of frames, focusing a specific frame if requested
+    // Call when a frame should be added / removed, or custom frames should be cleared
+    void setFrames(FrameFocus focus = FOCUS_DEFAULT);
+
+    std::vector<const uint8_t *> indicatorIcons; // Per-frame custom icon pointers
     Screen(const Screen &) = delete;
     Screen &operator=(const Screen &) = delete;
 
@@ -191,21 +247,19 @@ class Screen : public concurrency::OSThread
     meshtastic_Config_DisplayConfig_OledType model;
     OLEDDISPLAY_GEOMETRY geometry;
 
+    bool isOverlayBannerShowing();
+
+    // Stores the last 4 of our hardware ID, to make finding the device for pairing easier
+    // FIXME: Needs refactoring and getMacAddr needs to be moved to a utility class
+    char ourId[5];
+
     /// Initializes the UI, turns on the display, starts showing boot screen.
     //
     // Not thread safe - must be called before any other methods are called.
     void setup();
 
     /// Turns the screen on/off. Optionally, pass a custom screensaver frame for E-Ink
-    void setOn(bool on, FrameCallback einkScreensaver = NULL)
-    {
-        if (!on)
-            // We handle off commands immediately, because they might be called because the CPU is shutting down
-            handleSetOn(false, einkScreensaver);
-        else
-            enqueueCmd(ScreenCmd{.cmd = Cmd::SET_ON});
-    }
-
+    void setOn(bool on, FrameCallback einkScreensaver = NULL);
     /**
      * Prepare the display for the unit going to the lowest power mode possible.  Most screens will just
      * poweroff, but eink screens will show a "I'm sleeping" graphic, possibly with a QR code
@@ -214,20 +268,8 @@ class Screen : public concurrency::OSThread
 
     void blink();
 
-    void drawFrameText(OLEDDisplay *, OLEDDisplayUiState *, int16_t, int16_t, const char *);
-
-    void getTimeAgoStr(uint32_t agoSecs, char *timeStr, uint8_t maxLength);
-
     // Draw north
-    void drawCompassNorth(OLEDDisplay *display, int16_t compassX, int16_t compassY, float myHeading);
-
-    static uint16_t getCompassDiam(uint32_t displayWidth, uint32_t displayHeight);
-
     float estimatedHeading(double lat, double lon);
-
-    void drawNodeHeading(OLEDDisplay *display, int16_t compassX, int16_t compassY, uint16_t compassDiam, float headingRadian);
-
-    void drawColumns(OLEDDisplay *display, int16_t x, int16_t y, const char **fields);
 
     /// Handle button press, trackball or swipe action)
     void onPress() { enqueueCmd(ScreenCmd{.cmd = Cmd::ON_PRESS}); }
@@ -260,6 +302,20 @@ class Screen : public concurrency::OSThread
         enqueueCmd(cmd);
     }
 
+    void showSimpleBanner(const char *message, uint32_t durationMs = 0);
+    void showOverlayBanner(BannerOverlayOptions);
+
+    void showNodePicker(const char *message, uint32_t durationMs, std::function<void(uint32_t)> bannerCallback);
+    void showNumberPicker(const char *message, uint32_t durationMs, uint8_t digits, std::function<void(uint32_t)> bannerCallback);
+    void showTextInput(const char *header, const char *initialText, uint32_t durationMs,
+                       std::function<void(const std::string &)> textCallback);
+
+    void requestMenu(graphics::menuHandler::screenMenus menuToShow)
+    {
+        graphics::menuHandler::menuQueue = menuToShow;
+        runNow();
+    }
+
     void startFirmwareUpdateScreen()
     {
         ScreenCmd cmd;
@@ -272,38 +328,31 @@ class Screen : public concurrency::OSThread
     void setHeading(long _heading)
     {
         hasCompass = true;
-        compassHeading = _heading;
+        compassHeading = fmod(_heading, 360);
     }
 
     bool hasHeading() { return hasCompass; }
 
     long getHeading() { return compassHeading; }
+
+    void setEndCalibration(uint32_t _endCalibrationAt) { endCalibrationAt = _endCalibrationAt; }
+    uint32_t getEndCalibration() { return endCalibrationAt; }
+
     // functions for display brightness
     void increaseBrightness();
     void decreaseBrightness();
 
-    void setFunctionSymbal(std::string sym);
-    void removeFunctionSymbal(std::string sym);
+    void setFunctionSymbol(std::string sym);
+    void removeFunctionSymbol(std::string sym);
 
     /// Stops showing the boot screen.
     void stopBootScreen() { enqueueCmd(ScreenCmd{.cmd = Cmd::STOP_BOOT_SCREEN}); }
 
-    /// Writes a string to the screen.
-    void print(const char *text)
+    void runNow()
     {
-        ScreenCmd cmd;
-        cmd.cmd = Cmd::PRINT;
-        // TODO(girts): strdup() here is scary, but we can't use std::string as
-        // FreeRTOS queue is just dumbly copying memory contents. It would be
-        // nice if we had a queue that could copy objects by value.
-        cmd.print_text = strdup(text);
-        if (!enqueueCmd(cmd)) {
-            free(cmd.print_text);
-        }
+        setFastFramerate();
+        enqueueCmd(ScreenCmd{.cmd = Cmd::NOOP});
     }
-
-    /// generates a very brief time delta display
-    std::string drawTimeDelta(uint32_t days, uint32_t hours, uint32_t minutes, uint32_t seconds);
 
     /// Overrides the default utf8 character conversion, to replace empty space with question marks
     static char customFontTableLookup(const uint8_t ch)
@@ -327,10 +376,15 @@ class Screen : public concurrency::OSThread
             SKIPREST = false;
             return (uint8_t)ch;
         }
+
+        case 0xC3: {
+            SKIPREST = false;
+            return (uint8_t)(ch | 0xC0);
+        }
         }
 
         // We want to strip out prefix chars for two-byte char formats
-        if (ch == 0xC2)
+        if (ch == 0xC2 || ch == 0xC3)
             return (uint8_t)0;
 
 #if defined(OLED_PL)
@@ -424,6 +478,86 @@ class Screen : public concurrency::OSThread
 
 #endif
 
+#if defined(OLED_CS)
+
+        switch (last) {
+        case 0xC2: {
+            SKIPREST = false;
+            return (uint8_t)ch;
+        }
+
+        case 0xC3: {
+            SKIPREST = false;
+            return (uint8_t)(ch | 0xC0);
+        }
+
+        case 0xC4: {
+            SKIPREST = false;
+            if (ch == 140)
+                return (uint8_t)(129); // Č
+            if (ch == 141)
+                return (uint8_t)(138); // č
+            if (ch == 142)
+                return (uint8_t)(130); // Ď
+            if (ch == 143)
+                return (uint8_t)(139); // ď
+            if (ch == 154)
+                return (uint8_t)(131); // Ě
+            if (ch == 155)
+                return (uint8_t)(140); // ě
+            // Slovak specific glyphs
+            if (ch == 185)
+                return (uint8_t)(147); // Ĺ
+            if (ch == 186)
+                return (uint8_t)(148); // ĺ
+            if (ch == 189)
+                return (uint8_t)(149); // Ľ
+            if (ch == 190)
+                return (uint8_t)(150); // ľ
+            break;
+        }
+
+        case 0xC5: {
+            SKIPREST = false;
+            if (ch == 135)
+                return (uint8_t)(132); // Ň
+            if (ch == 136)
+                return (uint8_t)(141); // ň
+            if (ch == 152)
+                return (uint8_t)(133); // Ř
+            if (ch == 153)
+                return (uint8_t)(142); // ř
+            if (ch == 160)
+                return (uint8_t)(134); // Š
+            if (ch == 161)
+                return (uint8_t)(143); // š
+            if (ch == 164)
+                return (uint8_t)(135); // Ť
+            if (ch == 165)
+                return (uint8_t)(144); // ť
+            if (ch == 174)
+                return (uint8_t)(136); // Ů
+            if (ch == 175)
+                return (uint8_t)(145); // ů
+            if (ch == 189)
+                return (uint8_t)(137); // Ž
+            if (ch == 190)
+                return (uint8_t)(146); // ž
+            // Slovak specific glyphs
+            if (ch == 148)
+                return (uint8_t)(151); // Ŕ
+            if (ch == 149)
+                return (uint8_t)(152); // ŕ
+            break;
+        }
+        }
+
+        // We want to strip out prefix chars for two-byte char formats
+        if (ch == 0xC2 || ch == 0xC3 || ch == 0xC4 || ch == 0xC5)
+            return (uint8_t)0;
+
+#endif
+
         // If we already returned an unconvertable-character symbol for this unconvertable-character sequence, return NULs for the
         // rest of it
         if (SKIPREST)
@@ -444,7 +578,7 @@ class Screen : public concurrency::OSThread
     int handleTextMessage(const meshtastic_MeshPacket *arg);
     int handleUIFrameEvent(const UIFrameEvent *arg);
     int handleInputEvent(const InputEvent *arg);
-    int handleAdminMessage(const meshtastic_AdminMessage *arg);
+    int handleAdminMessage(AdminModule_ObserverData *arg);
 
     /// Used to force (super slow) eink displays to draw critical frames
     void forceDisplay(bool forceUiUpdate = false);
@@ -452,10 +586,12 @@ class Screen : public concurrency::OSThread
     /// Draws our SSL cert screen during boot (called from WebServer)
     void setSSLFrames();
 
-    void setWelcomeFrames();
-
     // Dismiss the currently focussed frame, if possible (e.g. text message, waypoint)
-    void dismissCurrentFrame();
+    void hideCurrentFrame();
+
+    // Menu-driven Show / Hide Toggle
+    void toggleFrameVisibility(const std::string &frameName);
+    bool isFrameHidden(const std::string &frameName) const;
 
 #ifdef USE_EINK
     /// Draw an image to remain on E-Ink display after screen off
@@ -502,7 +638,6 @@ class Screen : public concurrency::OSThread
     void handleOnPress();
     void handleShowNextFrame();
     void handleShowPrevFrame();
-    void handlePrint(const char *text);
     void handleStartFirmwareUpdateScreen();
 
     // Info collected by setFrames method.
@@ -511,64 +646,61 @@ class Screen : public concurrency::OSThread
     // - Used to dismiss the currently shown frame (txt; waypoint) by CardKB combo
     struct FramesetInfo {
         struct FramePositions {
-            uint8_t fault = 0;
-            uint8_t textMessage = 0;
-            uint8_t waypoint = 0;
-            uint8_t focusedModule = 0;
-            uint8_t log = 0;
-            uint8_t settings = 0;
-            uint8_t wifi = 0;
+            uint8_t fault = 255;
+            uint8_t waypoint = 255;
+            uint8_t focusedModule = 255;
+            uint8_t log = 255;
+            uint8_t settings = 255;
+            uint8_t wifi = 255;
+            uint8_t deviceFocused = 255;
+            uint8_t system = 255;
+            uint8_t gps = 255;
+            uint8_t home = 255;
+            uint8_t textMessage = 255;
+            uint8_t nodelist = 255;
+            uint8_t nodelist_lastheard = 255;
+            uint8_t nodelist_hopsignal = 255;
+            uint8_t nodelist_distance = 255;
+            uint8_t nodelist_bearings = 255;
+            uint8_t clock = 255;
+            uint8_t chirpy = 255;
+            uint8_t firstFavorite = 255;
+            uint8_t lastFavorite = 255;
+            uint8_t lora = 255;
         } positions;
 
         uint8_t frameCount = 0;
     } framesetInfo;
 
-    // Which frame we want to be displayed, after we regen the frameset by calling setFrames
-    enum FrameFocus : uint8_t {
-        FOCUS_DEFAULT,  // No specific frame
-        FOCUS_PRESERVE, // Return to the previous frame
-        FOCUS_FAULT,
-        FOCUS_TEXTMESSAGE,
-        FOCUS_MODULE, // Note: target module should call requestFocus(), otherwise no info about which module to focus
-    };
-
-    // Regenerate the normal set of frames, focusing a specific frame if requested
-    // Call when a frame should be added / removed, or custom frames should be cleared
-    void setFrames(FrameFocus focus = FOCUS_DEFAULT);
+    struct hiddenFrames {
+        bool textMessage = false;
+        bool waypoint = false;
+        bool wifi = false;
+        bool system = false;
+        bool home = false;
+        bool clock = false;
+#ifndef USE_EINK
+        bool nodelist = false;
+#endif
+#ifdef USE_EINK
+        bool nodelist_lastheard = false;
+        bool nodelist_hopsignal = false;
+        bool nodelist_distance = false;
+#endif
+#if HAS_GPS
+        bool nodelist_bearings = false;
+        bool gps = false;
+#endif
+        bool lora = false;
+        bool show_favorites = false;
+        bool chirpy = true;
+    } hiddenFrames;
 
     /// Try to start drawing ASAP
     void setFastFramerate();
 
     // Sets frame up for immediate drawing
     void setFrameImmediateDraw(FrameCallback *drawFrames);
-
-    /// Called when debug screen is to be drawn, calls through to debugInfo.drawFrame.
-    static void drawDebugInfoTrampoline(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
-
-    static void drawDebugInfoSettingsTrampoline(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
-
-    static void drawDebugInfoWiFiTrampoline(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
-
-#ifdef T_WATCH_S3
-    static void drawAnalogClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
-
-    static void drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
-
-    static void drawSegmentedDisplayCharacter(OLEDDisplay *display, int x, int y, uint8_t number, float scale = 1);
-
-    static void drawHorizontalSegment(OLEDDisplay *display, int x, int y, int width, int height);
-
-    static void drawVerticalSegment(OLEDDisplay *display, int x, int y, int width, int height);
-
-    static void drawSegmentedDisplayColon(OLEDDisplay *display, int x, int y, float scale = 1);
-
-    static void drawWatchFaceToggleButton(OLEDDisplay *display, int16_t x, int16_t y, bool digitalMode = true, float scale = 1);
-
-    static void drawBluetoothConnectedIcon(OLEDDisplay *display, int16_t x, int16_t y);
-
-    // Whether we are showing the digital watch face or the analog one
-    bool digitalWatchFace = true;
-#endif
 
     /// callback for current alert frame
     FrameCallback alertFrame;
@@ -588,6 +720,8 @@ class Screen : public concurrency::OSThread
 
     bool hasCompass = false;
     float compassHeading;
+    uint32_t endCalibrationAt;
+
     /// Holds state for debug information
     DebugInfo debugInfo;
 
@@ -599,5 +733,10 @@ class Screen : public concurrency::OSThread
 };
 
 } // namespace graphics
+
+// Extern declarations for function symbols used in UIRenderer
+extern std::vector<std::string> functionSymbol;
+extern std::string functionSymbolString;
+extern graphics::Screen *screen;
 
 #endif

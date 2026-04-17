@@ -1,5 +1,5 @@
 #define LED_PIN 5
-#define LED_INVERTED true
+#define LED_STATE_ON 0
 
 #define HAS_BUTTON 1
 #define BUTTON_PIN 0
